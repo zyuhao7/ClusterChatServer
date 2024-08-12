@@ -1,4 +1,4 @@
-JsonTest makefile
+# JsonTest makefile
 test:testJson.cc
 	g++ -o $@ $^
 .PHONY:clean
