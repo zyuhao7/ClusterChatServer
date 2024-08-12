@@ -2,7 +2,6 @@
 #include "public.hpp"
 #include <muduo/base/Logging.h>
 #include <string>
-#include <vector>
 using namespace std;
 using namespace muduo;
 
