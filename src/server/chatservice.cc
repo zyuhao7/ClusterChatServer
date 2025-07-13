@@ -39,12 +39,13 @@ MsgHandler ChatService::getHandler(int msgid)
     }
 }
 
-void ChatService::login(const TcpConnection &conn, json &js, Timestamp time)
+ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
     LOG_INFO << "Do Login service!!";
 }
 
-void ChatService::reg(const TcpConnection &conn, json &js, Timestamp time)
+void ChatService::reg(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
     LOG_INFO << "Do Register service!!";
+
 }
