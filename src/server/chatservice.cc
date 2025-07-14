@@ -44,8 +44,32 @@ MsgHandler ChatService::getHandler(int msgid)
     LOG_INFO << "Do Login service!!";
 }
 
+// name passward 
 void ChatService::reg(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
-    LOG_INFO << "Do Register service!!";
+    string name = js["name"];
+    string pwd = js["password"];
+    User user;
+    user.SetName(name);
+    user.SetPwd(pwd);
+    bool state = _userModal.Insert(user);
+    if(state)
+    {
+        LOG_INFO<<"注册成功";
+        json response;
+        response["msgid"] = REG_MSG_ACK;
+        response["errno"] = 0;
+        response["id"] = user.GetId();
+        conn->send(response.dump());
+    }
+    else
+    {
+        LOG_INFO<<"注册失败";
+        json response;
+        response["msgid"] = REG_MSG_ACK;
+        response["errno"] = 1;
+        response["errmsg"] = "reg failed";
+        conn->send(response.dump());
 
+    }
 }
