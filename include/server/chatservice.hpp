@@ -1,15 +1,14 @@
 #ifndef CHATSERVICE_H
 #define CHATSERVICE_H
-
 #include <muduo/net/TcpConnection.h>
 #include <unordered_map>
 #include <functional>
 #include <mutex>
+#include "json.hpp"
+#include "usermodal.hpp"
 using namespace std;
 using namespace muduo;
 using namespace muduo::net;
-
-#include "json.hpp"
 using json = nlohmann::json;
 
 // 表示处理消息的事件回调方法类型
@@ -25,12 +24,15 @@ public:
     void login(const TcpConnectionPtr &conn, json &js, Timestamp time);
     // 处理注册业务
     void reg(const TcpConnectionPtr &conn, json &js, Timestamp time);
-    // 一对一聊天业务
-
+    // 获得消息对应的处理器
+    MsgHandler getHandler(int msg_id);
 private:
     ChatService();
     // 存储消息id和其对应的业务处理方法
     unordered_map<int, MsgHandler> _msgHandlerMap;
+
+    // 数据操作类对象
+    UserModal _userModal;
 };
 
 #endif
