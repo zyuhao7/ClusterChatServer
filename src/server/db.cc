@@ -7,6 +7,10 @@ bool MySQL::connect()
     if (p != nullptr)
     {
          mysql_query(_conn, "set names gbk");
+         LOG_INFO << "connect mysql success!";
+    }
+    else{
+        LOG_INFO << "connect mysql failed";
     }
     return p;
 }
@@ -35,3 +39,8 @@ MYSQL_RES* MySQL::query(string sql)
     }
     return mysql_use_result(_conn);
 }
+
+ MYSQL* MySQL::getConnection()
+ {
+    return _conn;
+ }
