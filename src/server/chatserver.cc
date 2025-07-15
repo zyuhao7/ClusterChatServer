@@ -28,8 +28,9 @@ void ChatServer::onConnection(const TcpConnectionPtr &conn)
 {
     if (!conn->connected())
     {
-        // ChatService::instance()->clientCloseException(conn);
-        // conn->shutdown();
+        std::cout << "ChatService::instance()->clientCloseException(conn);" << std::endl;
+        ChatService::instance()->clientCloseException(conn);
+        conn->shutdown();
     }
 }
 
