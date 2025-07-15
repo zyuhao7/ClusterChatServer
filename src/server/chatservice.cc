@@ -1,6 +1,7 @@
 #include "chatservice.hpp"
 #include "public.hpp"
 #include <muduo/base/Logging.h>
+#include <iostream>
 #include <string>
 using namespace std;
 using namespace muduo;
@@ -42,6 +43,52 @@ MsgHandler ChatService::getHandler(int msgid)
  void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
     LOG_INFO << "Do Login service!!";
+    int id = js["id"];
+    string pwd = js["password"];
+    
+    User user = _userModal.query(id);
+    if(user.GetId() == id && user.GetPwd() == pwd)
+    {
+        std::cout<<user.GetState() <<std::endl;
+        if(user.GetState() == "online")
+        {
+            // 该用户已经上线, 不允许重复登录.
+            json response;
+            response["msgid"] = LOGIN_MSG_ACK;
+            response["errno"] = 2;
+            response["errmsg"] = "该账户已经登陆..";
+            conn->send(response.dump());
+        }
+        else
+        {
+            //登陆成功,
+            // 1. 更新用户状态信息
+            user.SetState("online");
+            _userModal.updateState(user);
+            
+            // 2. 记录用户连接信息
+            {
+                lock_guard<std::mutex> lock(_mtx);
+                _userConnMap.insert({id, conn});
+            }
+
+            json response;
+            response["msgid"] = LOGIN_MSG_ACK;
+            response["errno"] = 0;
+            response["id"] = user.GetId();
+            response["name"] = user.GetName();
+            conn->send(response.dump());
+        }
+    }
+    else
+    {
+        // 登录失败
+        json response;
+        response["msgid"] = LOGIN_MSG_ACK;
+        response["errno"] = 1;
+        response["errmsg"] = "用户名或者密码错误";
+        conn->send(response.dump());
+    }
 }
 
 // name passward 
@@ -71,5 +118,31 @@ void ChatService::reg(const TcpConnectionPtr &conn, json &js, Timestamp time)
         response["errmsg"] = "reg failed";
         conn->send(response.dump());
 
+    }
+}
+
+void ChatService::clientCloseException(const TcpConnectionPtr& conn)
+{
+    User user;
+    {
+        lock_guard<std::mutex> lock(_mtx);
+
+        for(auto it = _userConnMap.begin();it != _userConnMap.end();it++)
+        {
+            if(it->second == conn)
+            {
+                // 从 map表删除用户的连接信息.
+                user.SetId(it->first);
+                _userConnMap.erase(it);
+                break;
+            }
+        }
+    }
+    
+    // 更新用户状态信息
+    if(user.GetId() != -1)
+    {
+        user.SetState("offline");
+        _userModal.updateState(user);
     }
 }
