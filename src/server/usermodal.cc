@@ -65,3 +65,14 @@ bool UserModal::updateState(User& user)
     }
     return  false;
 }
+
+void UserModal::resetState()
+{
+      char sql[1024] = "update user set state = 'offline' where state = 'online'"; 
+    
+    MySQL mysql;
+    if(mysql.connect())
+    {
+       mysql.update(sql);
+    }
+}
