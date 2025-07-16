@@ -22,6 +22,12 @@ ChatService::ChatService()
     _msgHandlerMap.insert({REG_MSG, std::bind(&ChatService::reg, this, _1, _2, _3)});
     _msgHandlerMap.insert({ONE_CHAT_MSG, std::bind(&ChatService::oneChat, this, _1, _2, _3)});
 }
+// 服务异常, 重置用户状态
+void ChatService::reset()
+{
+    // 下线状态设置
+    _userModal.resetState();
+}
 
 // 获取消息对应的处理器
 MsgHandler ChatService::getHandler(int msgid)
