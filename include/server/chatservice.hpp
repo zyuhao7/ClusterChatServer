@@ -7,6 +7,7 @@
 #include "json.hpp"
 #include "offlinemsgmodal.hpp"
 #include "usermodal.hpp"
+#include "friendmodal.hpp"
 using namespace std;
 using namespace muduo;
 using namespace muduo::net;
@@ -33,16 +34,20 @@ public:
     void clientCloseException(const TcpConnectionPtr& conn);
     // 服务异常, 重置用户状态
     void reset();
+    // 添加好友服务
+    void addFriend(const TcpConnectionPtr& conn, json& js, Timestamp time);
 private:
     ChatService();
     // 存储消息id和其对应的业务处理方法
     unordered_map<int, MsgHandler> _msgHandlerMap;
     // 存储在线用户的通信连接
     unordered_map<int, TcpConnectionPtr> _userConnMap;
+    
     // 数据操作类对象
     UserModal _userModal;
-    // 离线消息模型
     OfflineMsgModal _offlineMsgModal;
+    FriendModal _friendModal;
+
     // 定义互斥锁, 保证 _userConnMap线程安全
     mutex _mtx;
 };
