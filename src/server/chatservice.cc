@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector> 
+#include <map>
 using namespace std;
 using namespace muduo;
 
@@ -21,6 +22,7 @@ ChatService::ChatService()
     _msgHandlerMap.insert({LOGIN_MSG, std::bind(&ChatService::login, this, _1, _2, _3)});
     _msgHandlerMap.insert({REG_MSG, std::bind(&ChatService::reg, this, _1, _2, _3)});
     _msgHandlerMap.insert({ONE_CHAT_MSG, std::bind(&ChatService::oneChat, this, _1, _2, _3)});
+    _msgHandlerMap.insert({ADD_FRIEND_MSG, std::bind(&ChatService::addFriend, this, _1, _2, _3)});
 }
 // 服务异常, 重置用户状态
 void ChatService::reset()
@@ -93,6 +95,22 @@ MsgHandler ChatService::getHandler(int msgid)
                 // 读取后删除
                 _offlineMsgModal.remove(id);
             }
+            // 4. 查询好友的信息并回消息
+            vector<User> userVec = _friendModal.query(id);
+            if(!userVec.empty())
+            {
+                vector<string> vec;
+                for(User& user : userVec)
+                {
+                    json js;
+                    js["id"] = user.GetId();
+                    js["name"] = user.GetName();
+                    js["state"] = user.GetState();
+                    vec.push_back(js.dump());
+                }
+                response["friends"] = vec;
+            }
+
             conn->send(response.dump());
         }
     }
@@ -178,4 +196,13 @@ void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time
     }
     // 对方不在线, 存储离线消息
     _offlineMsgModal.insert(toid, js.dump());
+}
+// 添加好友业务
+ void ChatService::addFriend(const TcpConnectionPtr& conn, json& js, Timestamp time)
+{
+    int userid = js["id"].get<int>();
+    int friendid = js["friendid"].get<int>();
+
+    // 存储好友信息
+    _friendModal.insert(userid, friendid); 
 }
