@@ -8,6 +8,7 @@
 #include "offlinemsgmodal.hpp"
 #include "usermodal.hpp"
 #include "friendmodal.hpp"
+#include "groupmoodal.hpp"
 using namespace std;
 using namespace muduo;
 using namespace muduo::net;
@@ -36,6 +37,12 @@ public:
     void reset();
     // 添加好友服务
     void addFriend(const TcpConnectionPtr& conn, json& js, Timestamp time);
+    // 创建群组服务
+    void createGroup(const TcpConnectionPtr& conn, json& js, Timestamp time); 
+    // 加入群组服务
+    void AddGroup(const TcpConnectionPtr& conn, json& js, Timestamp time);
+    // 群聊天服务
+    void groupChat(const TcpConnectionPtr& conn, json& js, Timestamp time);
 private:
     ChatService();
     // 存储消息id和其对应的业务处理方法
@@ -47,7 +54,8 @@ private:
     UserModal _userModal;
     OfflineMsgModal _offlineMsgModal;
     FriendModal _friendModal;
-
+    GroupModal _groupModal;
+    
     // 定义互斥锁, 保证 _userConnMap线程安全
     mutex _mtx;
 };
