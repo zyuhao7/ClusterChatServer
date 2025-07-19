@@ -23,6 +23,8 @@ ChatService::ChatService()
     _msgHandlerMap.insert({REG_MSG, std::bind(&ChatService::reg, this, _1, _2, _3)});
     _msgHandlerMap.insert({ONE_CHAT_MSG, std::bind(&ChatService::oneChat, this, _1, _2, _3)});
     _msgHandlerMap.insert({ADD_FRIEND_MSG, std::bind(&ChatService::addFriend, this, _1, _2, _3)});
+    _msgHandlerMap.insert({CREATE_GROUP_MSG, std::bind(&ChatService::createGroup, this, _1, _2, _3)});
+    _msgHandlerMap.insert({ADD_GROUP_MSG, std::bind(&ChatService::AddGroup, this, _1, _2, _3)});
 }
 // 服务异常, 重置用户状态
 void ChatService::reset()
@@ -205,4 +207,59 @@ void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time
 
     // 存储好友信息
     _friendModal.insert(userid, friendid); 
+}
+
+// 创建群组业务
+void ChatService::createGroup(const TcpConnectionPtr& conn, json& js, Timestamp time)
+{
+    int userid = js["id"].get<int>();
+    string name = js["groupname"];
+    string desc = js["groupdesc"];
+
+    // 存储群组信息
+    Group group(-1, name, desc);
+    if(_groupModal.CreateGroup(group))
+    {
+        // 存储群组创建人信息
+        _groupModal.AddGroup(userid, group.GetId(), "creator");
+    }
+    else
+    {
+        json response;
+        response["msgid"] = CREATE_GROUP_MSG_ACK;
+        response["errno"] = 1;
+        response["errmsg"] = "创建群组失败";
+        conn->send(response.dump());
+    }
+}
+
+void   ChatService::AddGroup(const TcpConnectionPtr& conn, json& js, Timestamp time)
+{
+    int userid = js["id"].get<int>();
+    int groupid = js["groupid"].get<int>();
+    _groupModal.AddGroup(userid, groupid, "normal");
+
+}
+
+void ChatService::groupChat(const TcpConnectionPtr& conn, json& js, Timestamp time)
+{
+    int userid = js["id"].get<int>();
+    int groupid = js["groupid"].get<int>();
+    vector<int> useridVec = _groupModal.QueryGroupUsers(userid,groupid);
+   
+    lock_guard<mutex> lock(_mtx);
+    for(int id : useridVec)
+    {
+        auto it = _userConnMap.find(id);
+        if(it != _userConnMap.end())
+        {
+            // 转发消息
+            it->second->send(js.dump());
+        }
+        else
+        {
+            // 离线消息
+            _offlineMsgModal.insert(id, js.dump());
+        }
+    }
 }
