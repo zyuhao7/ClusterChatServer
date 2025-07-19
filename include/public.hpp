@@ -15,7 +15,9 @@ enum EnMsgType
     ADD_FRIEND_MSG, // 添加好友消息
 
     CREATE_GROUP_MSG, // 创建群组
+    CREATE_GROUP_MSG_ACK, // 创建群组响应消息
     ADD_GROUP_MSG, // 加入群组
+    ADD_GROUP_MSG_ACK, // 加入群组响应消息
     GROUP_CHAT_MSG, // 群聊天
 };
 
