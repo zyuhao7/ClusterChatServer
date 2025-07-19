@@ -19,6 +19,7 @@ enum EnMsgType
     ADD_GROUP_MSG, // 加入群组
     ADD_GROUP_MSG_ACK, // 加入群组响应消息
     GROUP_CHAT_MSG, // 群聊天
+    
 };
 
 #endif
