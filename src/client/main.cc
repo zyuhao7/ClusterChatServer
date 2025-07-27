@@ -203,7 +203,7 @@ void doLoginResponse(json &response)
     {
         // 1. 记录当前用户的 id 和 name
         g_CurrentUser.SetId(response["id"].get<int>());
-        g_CurrentUser.SetName(response["name"].get<string>());
+        g_CurrentUser.SetName(response["name"]);
 
         // 2. 记录当前用户的好友列表
         if (response.contains("friends"))
@@ -217,8 +217,8 @@ void doLoginResponse(json &response)
                 json js = json::parse(str);
                 User user;
                 user.SetId(js["id"].get<int>());
-                user.SetName(js["name"].get<string>());
-                user.SetState(js["state"].get<string>());
+                user.SetName(js["name"]);
+                user.SetState(js["state"]);
                 g_CurrentUserFriendsList.push_back(user);
             }
         }
@@ -234,7 +234,8 @@ void doLoginResponse(json &response)
                 json js = json::parse(str);
                 Group group;
                 group.SetId(js["id"].get<int>());
-                group.SetName(js["groupname"].get<string>());
+                group.SetName(js["groupname"]);
+                group.SetDesc(js["groupdesc"]);
 
                 vector<string> vec2 = js["users"];
                 for (string &user : vec2)
@@ -242,10 +243,12 @@ void doLoginResponse(json &response)
                     GroupUser g_user;
                     json js = json::parse(user); // 解析每个群组中的用户信息
                     g_user.SetId(js["id"].get<int>());
-                    g_user.SetName(js["name"].get<string>());
-                    g_user.SetState(js["state"].get<string>());
+                    g_user.SetName(js["name"]);
+                    g_user.SetState(js["state"]);
+                    g_user.SetRole(js["role"]);
                     group.GetUsers().push_back(g_user);
                 }
+                g_CurrentUserGroupsList.push_back(group);
             }
         }
         // 显示当前登录成功用户的基本信息
