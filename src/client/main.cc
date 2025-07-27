@@ -465,8 +465,10 @@ void chat(int clientfd, string str)
     json js;
     js["msgid"] = ONE_CHAT_MSG;
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
-    js["friendid"] = friendid;
+    js["name"] = g_CurrentUser.GetName();
+    js["toid"] = friendid;
     js["msg"] = msg;
+    js["time"] = getCurrentTime();
 
     string request = js.dump();
     int len = send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0);
@@ -532,8 +534,10 @@ void groupchat(int clientfd, string str)
     json js;
     js["msgid"] = GROUP_CHAT_MSG;
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
+    js["name"] = g_CurrentUser.GetName();
     js["groupid"] = groupid;
     js["msg"] = msg;
+    js["time"] = getCurrentTime();
 
     string request = js.dump();
     int len = send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0);
