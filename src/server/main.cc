@@ -2,29 +2,34 @@
 #include "chatservice.hpp"
 #include <iostream>
 #include <signal.h>
-
 using namespace std;
 
 // 处理 Ctrl + c 信号
-void resetHanlder(int)
+void resetHandler(int)
 {
     ChatService::instance()->reset();
     exit(0);
 }
-int main()
+int main(int argc, char **argv)
 {
-    signal(SIGINT, resetHanlder);
+    if (argc < 3)
+    {
+        cerr << "command invalid! example: ./ChatServer 127.0.0.1 6000" << endl;
+        exit(-1);
+    }
+    // 解析通过命令行参数传递的ip和port
+    char *ip = argv[1];
+    uint16_t port = atoi(argv[2]);
+
+    signal(SIGINT, resetHandler);
+
     EventLoop loop;
-    InetAddress addr("127.0.0.1", 6000);
+    InetAddress addr(ip, port);
     ChatServer server(&loop, addr, "ChatServer");
 
     server.start();
     loop.loop();
-    
-    // {"msgid":1}
-    // {"msgid":4,"name":"myh","password":"123456"}
-    // {"msgid":4,"name":"xh","password":"123456"} 注册
-    // {"msgid": 1, "id":2, "password":"123456"}  登录
-    // {"msgid":6,"id":1,"from":"myh","to":2,"msg":"hello"} 一对一聊天
-    // {"msgid":7, "id":2, "friendid":1} 添加好友
+    /*
+        
+    */
 }
