@@ -67,7 +67,7 @@ MsgHandler ChatService::getHandler(int msgid)
 void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
     LOG_INFO << "Do Login service!!";
-    int id = js["id"];
+    int id = js["id"].get<int>();
     string pwd = js["password"];
 
     User user = _userModal.query(id);
