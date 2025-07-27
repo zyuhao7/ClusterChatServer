@@ -25,6 +25,7 @@ C++ 实现的集群聊天服务器，支持多服务器负载均衡与跨服务�
 - **版本控制**：GitHub
 
 ## 项目结构
+```
 ClusterChatServer-master/
 ├── CMakeLists.txt               # 项目主构建配置文件
 ├── README.md                    # 项目说明文档
@@ -46,6 +47,7 @@ ClusterChatServer-master/
 │   └── TestMuduo/               # Muduo网络库测试模块
 └── thirdparty/                  # 第三方依赖库
     └── json.hpp                 # JSON序列化/反序列化库
+```
 ## 构建与安装
 ### 环境要求
 - C++11及以上编译器
