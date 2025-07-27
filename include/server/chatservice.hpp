@@ -30,8 +30,12 @@ public:
   void reg(const TcpConnectionPtr &conn, json &js, Timestamp time);
   // 处理一对一聊天业务
   void oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  // 处理注销业务
+  void loginout(const TcpConnectionPtr &conn, json &js, Timestamp time);
   // 获得消息对应的处理器
   MsgHandler getHandler(int msg_id);
+  // 从redis消息队列中获取订阅的消息
+  void handleRedisSubscribeMessage(int, string);
   // 客户端异常退出
   void clientCloseException(const TcpConnectionPtr &conn);
   // 服务异常, 重置用户状态
