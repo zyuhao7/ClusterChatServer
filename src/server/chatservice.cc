@@ -68,8 +68,8 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
     LOG_INFO << "Do Login service!!";
     int id = js["id"].get<int>();
-    string pwd = js["password"];
-
+    string pwd = js["password"].get<string>();
+    std::cout << id << " " << pwd << endl;
     User user = _userModal.query(id);
     if (user.GetId() == id && user.GetPwd() == pwd)
     {
@@ -242,7 +242,7 @@ void ChatService::clientCloseException(const TcpConnectionPtr &conn)
 
 void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
-    int toid = js["to"].get<int>();
+    int toid = js["toid"].get<int>();
     {
         lock_guard<std::mutex> lock(_mtx);
         auto it = _userConnMap.find(toid);
