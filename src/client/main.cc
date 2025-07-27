@@ -194,9 +194,9 @@ void doRegResponse(json &response)
 void doLoginResponse(json &response)
 {
     // 登录失败
-    if (0 == response["errno"].get<int>())
+    if (0 != response["errno"].get<int>())
     {
-        cerr << response["errmsg"].get<string>() << endl;
+        cerr << response["errmsg"] << endl;
         g_isLoginSuccess = false; // 登录失败
     }
     else // 登陆成功
