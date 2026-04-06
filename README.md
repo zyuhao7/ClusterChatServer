@@ -29,6 +29,7 @@ C++ 实现的集群聊天服务器，支持多服务器负载均衡与跨服务�
 ClusterChatServer/
 ├── CMakeLists.txt
 ├── README.md
+├── admin_service/              # Python FastAPI 管理后台骨架
 ├── example/
 │   ├── makefile
 │   ├── muduo_Server.cc
@@ -310,6 +311,103 @@ bin/chat_client
 
 ---
 
+## Python 管理后台：admin_service
+
+仓库还提供了一个独立的 **Python FastAPI 管理后台骨架**：
+
+```text
+admin_service/
+```
+
+它不替代当前 C++ 聊天服务，而是作为辅助管理与查询模块使用，适合后续做：
+
+- 用户查询
+- 好友关系查询
+- 群组查询
+- 离线消息查询
+- 健康检查
+- 后续扩展为管理后台 / 运营后台 / 审计接口
+
+### 目录结构
+
+```text
+admin_service/
+├── README.md
+├── requirements.txt
+├── .env.example
+└── app/
+    ├── main.py
+    ├── core/
+    ├── db/
+    ├── models/
+    ├── routers/
+    └── schemas/
+```
+
+### 安装依赖
+
+```bash
+cd admin_service
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 配置环境变量
+
+```bash
+cd admin_service
+cp .env.example .env
+```
+
+默认示例：
+
+```env
+APP_NAME=ClusterChat Admin Service
+APP_HOST=127.0.0.1
+APP_PORT=8010
+DEBUG=true
+
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=123456
+MYSQL_DATABASE=chat
+```
+
+### 启动管理后台
+
+```bash
+cd admin_service
+source .venv/bin/activate
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+```
+
+### 当前接口
+
+- `GET /`
+- `GET /health`
+- `GET /api/v1/users`
+- `GET /api/v1/users/{user_id}`
+- `GET /api/v1/friends`
+- `GET /api/v1/groups`
+- `GET /api/v1/offline-messages`
+
+### 说明
+
+- 当前 `admin_service` 是骨架版本，重点在于提供可扩展结构
+- 如果 VS Code / Pylance 提示找不到 `sqlalchemy`、`fastapi` 等模块，通常是因为：
+  - 还没有安装 `requirements.txt`
+  - 或 VS Code 没切换到 `admin_service/.venv` 解释器
+
+建议在 VS Code 中选择：
+
+```text
+Python: Select Interpreter -> admin_service/.venv/bin/python
+```
+
+---
+
 ## 运行程序
 
 ### 启动服务器
@@ -559,5 +657,4 @@ sudo apt install -y libhiredis-dev
 - `include/server/db/db.h` 里的用户名密码不对
 
 ---
-
 
