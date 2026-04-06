@@ -10,7 +10,11 @@ CREATE TABLE IF NOT EXISTS user (
 
 CREATE TABLE IF NOT EXISTS friend (
     userid INT NOT NULL,
-    friendid INT NOT NULL
+    friendid INT NOT NULL,
+    PRIMARY KEY (userid, friendid),
+    CONSTRAINT chk_friend_not_self CHECK (userid <> friendid),
+    CONSTRAINT fk_friend_user FOREIGN KEY (userid) REFERENCES user(id) ON DELETE CASCADE,
+    CONSTRAINT fk_friend_friend FOREIGN KEY (friendid) REFERENCES user(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS allgroup (
