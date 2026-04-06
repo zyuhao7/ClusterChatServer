@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
-from app.core.config import settings
-from app.routers import friends, groups, health, offline_messages, users
+from admin_service.app.core.config import settings
+from admin_service.app.routers import friends, groups, health, offline_messages, users
 
 
 app = FastAPI(

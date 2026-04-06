@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
+from admin_service.app.db.database import get_db
 
 router = APIRouter(tags=["groups"])
 

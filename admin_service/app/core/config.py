@@ -1,4 +1,10 @@
+from pathlib import Path
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -14,10 +20,25 @@ class Settings(BaseSettings):
     mysql_database: str = "chat"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "debug"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "release"}:
+                return False
+
+        return bool(value)
 
     @property
     def database_url(self) -> str:
