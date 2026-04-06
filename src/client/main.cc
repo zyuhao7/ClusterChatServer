@@ -279,6 +279,27 @@ void doLoginResponse(json &response)
     }
 }
 
+// 处理添加好友响应逻辑
+void doAddFriendResponse(json &response)
+{
+    if (0 != response["errno"].get<int>())
+    {
+        cerr << "add friend failed: " << response["errmsg"].get<string>() << endl;
+        return;
+    }
+
+    cout << "add friend success";
+    if (response.contains("friendid"))
+    {
+        cout << ", friendid: " << response["friendid"].get<int>();
+    }
+    if (response.contains("friendname"))
+    {
+        cout << ", friendname: " << response["friendname"].get<string>();
+    }
+    cout << endl;
+}
+
 // 子线程-接收线程
 void readTaskHandler(int clientfd)
 {
@@ -326,6 +347,12 @@ void readTaskHandler(int clientfd)
             // 注册响应消息
             doRegResponse(js);
             sem_post(&rwsem); // 通知主线程注册响应已处理完毕
+            continue;
+        }
+        else if (ADD_FRIEND_MSG_ACK == msgtype)
+        {
+            // 添加好友响应消息
+            doAddFriendResponse(js);
             continue;
         }
     }
@@ -452,7 +479,7 @@ void addfriend(int clientfd, string str)
     }
     else
     {
-        cout << "Add friend request sent to server, Waiting for response..." << endl;
+        cout << "Add friend request sent to server." << endl;
     }
 }
 
