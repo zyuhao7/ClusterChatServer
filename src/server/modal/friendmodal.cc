@@ -2,15 +2,39 @@
 #include "db.h"
 #include <cstdio>
 #include <cstdlib>
-void FriendModal::insert(int userid, int friendid)
+
+bool FriendModal::insert(int userid, int friendid)
 {
      char sql[1024] = {0};
-    sprintf(sql, "insert into friend values(%d, %d)", userid, friendid);
+    sprintf(sql, "insert into friend(userid, friendid) values(%d, %d),(%d, %d)",
+            userid, friendid, friendid, userid);
     MySQL mysql;
     if(mysql.connect())
     {
-        mysql.update(sql);
+        return mysql.update(sql);
     }
+    return false;
+}
+
+bool FriendModal::isFriend(int userid, int friendid)
+{
+    char sql[1024] = {0};
+    sprintf(sql, "select 1 from friend where userid = %d and friendid = %d limit 1",
+            userid, friendid);
+
+    MySQL mysql;
+    if(mysql.connect())
+    {
+        MYSQL_RES* res = mysql.query(sql);
+        if(res != nullptr)
+        {
+            MYSQL_ROW row = mysql_fetch_row(res);
+            bool is_friend = (row != nullptr);
+            mysql_free_result(res);
+            return is_friend;
+        }
+    }
+    return false;
 }
 
 vector<User> FriendModal::query(int userid)

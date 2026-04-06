@@ -261,9 +261,48 @@ void ChatService::addFriend(const TcpConnectionPtr &conn, json &js, Timestamp ti
 {
     int userid = js["id"].get<int>();
     int friendid = js["friendid"].get<int>();
+    json response;
+    response["msgid"] = ADD_FRIEND_MSG_ACK;
 
-    // 存储好友信息
-    _friendModal.insert(userid, friendid);
+    if (userid == friendid)
+    {
+        response["errno"] = 1;
+        response["errmsg"] = "不能添加自己为好友";
+        conn->send(response.dump());
+        return;
+    }
+
+    User friendUser = _userModal.query(friendid);
+    if (friendUser.GetId() != friendid)
+    {
+        response["errno"] = 2;
+        response["errmsg"] = "好友用户不存在";
+        conn->send(response.dump());
+        return;
+    }
+
+    if (_friendModal.isFriend(userid, friendid))
+    {
+        response["errno"] = 3;
+        response["errmsg"] = "该用户已经是你的好友";
+        conn->send(response.dump());
+        return;
+    }
+
+    // 双向存储好友信息
+    if (_friendModal.insert(userid, friendid))
+    {
+        response["errno"] = 0;
+        response["friendid"] = friendid;
+        response["friendname"] = friendUser.GetName();
+    }
+    else
+    {
+        response["errno"] = 4;
+        response["errmsg"] = "添加好友失败";
+    }
+
+    conn->send(response.dump());
 }
 
 // 创建群组业务

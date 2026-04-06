@@ -8,7 +8,9 @@ class FriendModal
 {
 public:
     // 添加好友关系
-    void insert(int userid, int friendid);
+    bool insert(int userid, int friendid);
+    // 判断是否已经是好友
+    bool isFriend(int userid, int friendid);
     // 返回好友列表
     vector<User> query(int userid);
 };
