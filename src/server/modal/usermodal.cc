@@ -1,6 +1,8 @@
 #include "usermodal.hpp"
 #include "db.h"
 #include <iostream>
+#include <cstdio>
+#include <cstdlib>
 using namespace std;
 
 bool UserModal::Insert(User& user)

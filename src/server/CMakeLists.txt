@@ -8,4 +8,13 @@ aux_source_directory(./redis REDIS_LIST)
 add_executable(ChatServer ${SRC_LIST} ${DB_LIST} ${MODAL_LIST} ${REDIS_LIST})
 
 # 指定可执行文件链接时需要依赖的库文件
-target_link_libraries(ChatServer  muduo_net muduo_base mysqlclient hiredis pthread)
+target_link_libraries(ChatServer
+    PRIVATE
+    ${MUDUO_NET_LIBRARY}
+    ${MUDUO_BASE_LIBRARY}
+    ${MYSQLCLIENT_LIBRARY}
+    ${HIREDIS_LIBRARY}
+    Threads::Threads
+)
+
+set_target_properties(ChatServer PROPERTIES OUTPUT_NAME chat_server)

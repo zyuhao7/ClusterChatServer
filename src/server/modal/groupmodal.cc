@@ -1,6 +1,8 @@
 #include "groupmoodal.hpp"
 #include "groupuser.hpp"
 #include "db.h"
+#include <cstdio>
+#include <cstdlib>
 
 bool GroupModal::CreateGroup(Group& group)
 {

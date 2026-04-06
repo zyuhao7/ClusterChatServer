@@ -1,5 +1,7 @@
 #include "friendmodal.hpp"
 #include "db.h"
+#include <cstdio>
+#include <cstdlib>
 void FriendModal::insert(int userid, int friendid)
 {
      char sql[1024] = {0};

@@ -1,5 +1,6 @@
 #include "offlinemsgmodal.hpp"
 #include "db.h"
+#include <cstdio>
 
 void OfflineMsgModal::insert(int userid, string msg)
 {

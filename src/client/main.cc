@@ -6,6 +6,8 @@
 #include <thread>
 #include <string>
 #include <vector>
+#include <cstring>
+#include <cstdlib>
 #include <chrono>
 #include <ctime>
 #include <unordered_map>

@@ -56,3 +56,5 @@ private:
     // 回调操作，收到订阅的消息，给service层上报
     function<void(int, string)> _notify_message_handler;
 };
+
+#endif
