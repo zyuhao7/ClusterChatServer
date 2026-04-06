@@ -560,8 +560,4 @@ sudo apt install -y libhiredis-dev
 
 ---
 
-## 说明
 
-- 当前客户端和服务端构建产物已统一为 README 中使用的名字：`chat_server`、`chat_client`
-- `example/muduo_client.cc` 已补齐
-- 若你希望我继续把 **缺失依赖直接安装到当前环境并实际跑起来**，我可以继续执行安装和验证
