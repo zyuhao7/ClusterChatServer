@@ -75,9 +75,9 @@ MYSQL_DATABASE=chat
 ## 启动
 
 ```bash
-cd admin_service
-source .venv/bin/activate
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+cd /home/xh/ClusterChatServer
+source admin_service/.venv/bin/activate
+uvicorn admin_service.app.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
 ---
@@ -86,11 +86,32 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 
 - `GET /`
 - `GET /health`
+- `GET /health/db`
 - `GET /api/v1/users`
 - `GET /api/v1/users/{user_id}`
 - `GET /api/v1/friends`
 - `GET /api/v1/groups`
 - `GET /api/v1/offline-messages`
+
+---
+
+## 运行说明
+
+- 推荐从仓库根目录启动，而不是进入 `admin_service/app` 子目录
+- `.env` 放在 `admin_service/.env`
+- 启动前请确保：
+  - MySQL 已启动
+  - `chat` 数据库已初始化
+  - `.env` 中数据库配置正确
+
+如果暂时只想验证服务已启动成功，可先访问：
+
+- `GET /`
+- `GET /health`
+
+如果要验证数据库可访问，可请求：
+
+- `GET /health/db`
 
 ---
 
@@ -101,4 +122,3 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 - 增加统计接口
 - 增加 Prometheus 指标
 - 对接前端管理页面
-
