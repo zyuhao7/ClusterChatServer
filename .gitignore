@@ -1,0 +1,31 @@
+# Local tooling
+.codex
+
+# C/C++ build outputs
+/bin/
+/build/
+*.o
+*.so
+*.a
+
+# Example/test binaries
+/example/muduo_server
+/example/muduo_client
+/example/testJson
+/test/TestJson/test
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# admin_service local files
+/admin_service/.env
+/admin_service/.venv/
+
+# OS/editor
+.DS_Store
+Thumbs.db
