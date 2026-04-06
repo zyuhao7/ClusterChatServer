@@ -13,6 +13,7 @@ enum EnMsgType
     REG_MSG_ACK,    // 注册响应消息
     ONE_CHAT_MSG,   // 聊天消息
     ADD_FRIEND_MSG, // 添加好友消息
+    ADD_FRIEND_MSG_ACK, // 添加好友响应消息
 
     CREATE_GROUP_MSG,     // 创建群组
     CREATE_GROUP_MSG_ACK, // 创建群组响应消息
