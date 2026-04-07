@@ -1,5 +1,7 @@
 #include "chatservice.hpp"
 #include "public.hpp"
+#include "appconfig.hpp"
+#include "password.hpp"
 #include <muduo/base/Logging.h>
 #include <iostream>
 #include <string>
@@ -29,6 +31,10 @@ ChatService::ChatService()
     _msgHandlerMap.insert({CREATE_GROUP_MSG, std::bind(&ChatService::createGroup, this, _1, _2, _3)});
     _msgHandlerMap.insert({ADD_GROUP_MSG, std::bind(&ChatService::AddGroup, this, _1, _2, _3)});
     _msgHandlerMap.insert({GROUP_CHAT_MSG, std::bind(&ChatService::groupChat, this, _1, _2, _3)});
+    _msgHandlerMap.insert({LEAVE_GROUP_MSG, std::bind(&ChatService::leaveGroup, this, _1, _2, _3)});
+    _msgHandlerMap.insert({SET_GROUP_ROLE_MSG, std::bind(&ChatService::setGroupRole, this, _1, _2, _3)});
+    _msgHandlerMap.insert({MARK_READ_MSG, std::bind(&ChatService::markRead, this, _1, _2, _3)});
+    _msgHandlerMap.insert({RECALL_MSG, std::bind(&ChatService::recallMessage, this, _1, _2, _3)});
 
     // 连接 redis服务器
     if (_redis.Connect())
@@ -37,6 +43,36 @@ ChatService::ChatService()
         // 设置上报消息的回调函数
         _redis.Init_Notify_Handler(std::bind(&ChatService::handleRedisSubscribeMessage, this, _1, _2));
     }
+}
+
+string ChatService::requestIdFrom(const json &js) const
+{
+    if (!js.contains("request_id"))
+    {
+        return "";
+    }
+    return js["request_id"].get<string>();
+}
+
+void ChatService::sendAck(
+    const TcpConnectionPtr &conn,
+    int ack_msgid,
+    const string &request_id,
+    int err_no,
+    const string &err_msg,
+    const json &extra) const
+{
+    json response;
+    response["msgid"] = ack_msgid;
+    response["request_id"] = request_id;
+    response["errno"] = err_no;
+    response["errmsg"] = err_msg;
+
+    for (auto it = extra.begin(); it != extra.end(); ++it)
+    {
+        response[it.key()] = it.value();
+    }
+    conn->send(response.dump());
 }
 // 服务异常, 重置用户状态
 void ChatService::reset()
@@ -69,21 +105,26 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
     LOG_INFO << "Do Login service!!";
     int id = js["id"].get<int>();
     string pwd = js["password"].get<string>();
-    std::cout << id << " " << pwd << endl;
+    string request_id = requestIdFrom(js);
     User user = _userModal.query(id);
-    if (user.GetId() == id && user.GetPwd() == pwd)
+    bool password_ok = user.GetId() == id && PasswordSecurity::verify(pwd, user.GetPwd());
+    if (password_ok)
     {
         if (user.GetState() == "online")
         {
-            // 该用户已经上线, 不允许重复登录.
-            json response;
-            response["msgid"] = LOGIN_MSG_ACK;
-            response["errno"] = 2;
-            response["errmsg"] = "该账户已经登陆..";
-            conn->send(response.dump());
+            sendAck(conn, LOGIN_MSG_ACK, request_id, 2, "该账户已经登陆..");
         }
         else
         {
+            if (!PasswordSecurity::isBcryptHash(user.GetPwd()))
+            {
+                string upgraded = PasswordSecurity::hashBcrypt(pwd, AppConfig::instance().server().bcrypt_cost);
+                if (!upgraded.empty())
+                {
+                    _userModal.updatePassword(user.GetId(), upgraded);
+                }
+            }
+
             // 登陆成功.
             //  1. 更新用户状态信息
             user.SetState("online");
@@ -97,17 +138,15 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
             // 3. 用户登录成功后，向redis订阅 channel(id)
             _redis.Subscribe(id);
 
-            json response;
-            response["msgid"] = LOGIN_MSG_ACK;
-            response["errno"] = 0;
-            response["id"] = user.GetId();
-            response["name"] = user.GetName();
+            json extra;
+            extra["id"] = user.GetId();
+            extra["name"] = user.GetName();
 
             // 4. 登录成功, 读取离线消息, 并发送
             vector<string> vec = _offlineMsgModal.query(id);
             if (vec.size() > 0)
             {
-                response["offlinemsg"] = vec;
+                extra["offlinemsg"] = vec;
                 // 读取后删除
                 _offlineMsgModal.remove(id);
             }
@@ -125,7 +164,7 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                     js["state"] = user.GetState();
                     vec2.push_back(js.dump());
                 }
-                response["friends"] = vec2;
+                extra["friends"] = vec2;
             }
             // 6. 查询用户的群组信息
             vector<Group> groupuserVec = _groupModal.QueryUserGroupInfo(id);
@@ -152,52 +191,56 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                     grpjson["users"] = userV;
                     groupV.push_back(grpjson.dump());
                 }
-                response["groups"] = groupV;
+                extra["groups"] = groupV;
             }
-            conn->send(response.dump());
+            sendAck(conn, LOGIN_MSG_ACK, request_id, 0, "", extra);
         }
     }
     else
     {
-        // 登录失败
-        json response;
-        response["msgid"] = LOGIN_MSG_ACK;
-        response["errno"] = 1;
-        response["errmsg"] = "用户名或者密码错误";
-        conn->send(response.dump());
+        sendAck(conn, LOGIN_MSG_ACK, request_id, 1, "用户名或者密码错误");
     }
 }
 
 // name passward
 void ChatService::reg(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
+    string request_id = requestIdFrom(js);
     string name = js["name"];
     string pwd = js["password"];
+    if (name.empty() || pwd.empty())
+    {
+        sendAck(conn, REG_MSG_ACK, request_id, 2, "用户名和密码不能为空");
+        return;
+    }
+
+    string hashed_pwd = PasswordSecurity::hashBcrypt(pwd, AppConfig::instance().server().bcrypt_cost);
+    if (hashed_pwd.empty())
+    {
+        sendAck(conn, REG_MSG_ACK, request_id, 3, "密码哈希失败");
+        return;
+    }
+
     User user;
     user.SetName(name);
-    user.SetPwd(pwd);
+    user.SetPwd(hashed_pwd);
     bool state = _userModal.Insert(user);
     if (state)
     {
         LOG_INFO << "注册成功";
-        json response;
-        response["msgid"] = REG_MSG_ACK;
-        response["errno"] = 0;
-        response["id"] = user.GetId();
-        conn->send(response.dump());
+        json extra;
+        extra["id"] = user.GetId();
+        sendAck(conn, REG_MSG_ACK, request_id, 0, "", extra);
     }
     else
     {
         LOG_INFO << "注册失败";
-        json response;
-        response["msgid"] = REG_MSG_ACK;
-        response["errno"] = 1;
-        response["errmsg"] = "reg failed";
-        conn->send(response.dump());
+        sendAck(conn, REG_MSG_ACK, request_id, 1, "reg failed");
     }
 }
 void ChatService::loginout(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
+    string request_id = requestIdFrom(js);
     int userid = js["id"].get<int>();
     {
         lock_guard<std::mutex> lock(_mtx);
@@ -213,6 +256,7 @@ void ChatService::loginout(const TcpConnectionPtr &conn, json &js, Timestamp tim
     // 更新用户状态信息
     User user(userid, "", "", "offline");
     _userModal.updateState(user);
+    sendAck(conn, LOGINOUT_MSG_ACK, request_id, 0, "");
 }
 void ChatService::clientCloseException(const TcpConnectionPtr &conn)
 {
@@ -242,7 +286,25 @@ void ChatService::clientCloseException(const TcpConnectionPtr &conn)
 
 void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
+    string request_id = requestIdFrom(js);
+    int userid = js["id"].get<int>();
     int toid = js["toid"].get<int>();
+    if (_userModal.query(toid).GetId() != toid)
+    {
+        sendAck(conn, ONE_CHAT_MSG_ACK, request_id, 1, "目标用户不存在");
+        return;
+    }
+
+    long long message_id = _messageHistoryModal.insertDirect(request_id, userid, toid, js["msg"].get<string>());
+    if (message_id < 0)
+    {
+        sendAck(conn, ONE_CHAT_MSG_ACK, request_id, 2, "消息入库失败");
+        return;
+    }
+
+    js["message_id"] = message_id;
+    js["read_state"] = "unread";
+
     {
         lock_guard<std::mutex> lock(_mtx);
         auto it = _userConnMap.find(toid);
@@ -250,98 +312,217 @@ void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time
         {
             // 转发消息
             it->second->send(js.dump());
-            return;
+        }
+        else
+        {
+            // 对方不在线, 存储离线消息
+            _offlineMsgModal.insert(toid, js.dump(), request_id);
         }
     }
-    // 对方不在线, 存储离线消息
-    _offlineMsgModal.insert(toid, js.dump());
+
+    json extra;
+    extra["message_id"] = message_id;
+    sendAck(conn, ONE_CHAT_MSG_ACK, request_id, 0, "", extra);
 }
 // 添加好友业务
 void ChatService::addFriend(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
+    string request_id = requestIdFrom(js);
     int userid = js["id"].get<int>();
     int friendid = js["friendid"].get<int>();
-    json response;
-    response["msgid"] = ADD_FRIEND_MSG_ACK;
 
     if (userid == friendid)
     {
-        response["errno"] = 1;
-        response["errmsg"] = "不能添加自己为好友";
-        conn->send(response.dump());
+        sendAck(conn, ADD_FRIEND_MSG_ACK, request_id, 1, "不能添加自己为好友");
         return;
     }
 
     User friendUser = _userModal.query(friendid);
     if (friendUser.GetId() != friendid)
     {
-        response["errno"] = 2;
-        response["errmsg"] = "好友用户不存在";
-        conn->send(response.dump());
+        sendAck(conn, ADD_FRIEND_MSG_ACK, request_id, 2, "好友用户不存在");
         return;
     }
 
     if (_friendModal.isFriend(userid, friendid))
     {
-        response["errno"] = 3;
-        response["errmsg"] = "该用户已经是你的好友";
-        conn->send(response.dump());
+        sendAck(conn, ADD_FRIEND_MSG_ACK, request_id, 3, "该用户已经是你的好友");
         return;
     }
 
     // 双向存储好友信息
     if (_friendModal.insert(userid, friendid))
     {
-        response["errno"] = 0;
-        response["friendid"] = friendid;
-        response["friendname"] = friendUser.GetName();
+        json extra;
+        extra["friendid"] = friendid;
+        extra["friendname"] = friendUser.GetName();
+        sendAck(conn, ADD_FRIEND_MSG_ACK, request_id, 0, "", extra);
     }
     else
     {
-        response["errno"] = 4;
-        response["errmsg"] = "添加好友失败";
+        sendAck(conn, ADD_FRIEND_MSG_ACK, request_id, 4, "添加好友失败");
     }
-
-    conn->send(response.dump());
 }
 
 // 创建群组业务
 void ChatService::createGroup(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
+    string request_id = requestIdFrom(js);
     int userid = js["id"].get<int>();
     string name = js["groupname"];
     string desc = js["groupdesc"];
+    if (name.empty())
+    {
+        sendAck(conn, CREATE_GROUP_MSG_ACK, request_id, 2, "群组名称不能为空");
+        return;
+    }
 
     // 存储群组信息
     Group group(-1, name, desc);
     if (_groupModal.CreateGroup(group))
     {
         // 存储群组创建人信息
-        _groupModal.AddGroup(userid, group.GetId(), "creator");
+        if (_groupModal.AddGroup(userid, group.GetId(), "creator"))
+        {
+            json extra;
+            extra["groupid"] = group.GetId();
+            sendAck(conn, CREATE_GROUP_MSG_ACK, request_id, 0, "", extra);
+            return;
+        }
     }
-    else
-    {
-        json response;
-        response["msgid"] = CREATE_GROUP_MSG_ACK;
-        response["errno"] = 1;
-        response["errmsg"] = "创建群组失败";
-        conn->send(response.dump());
-    }
+
+    sendAck(conn, CREATE_GROUP_MSG_ACK, request_id, 1, "创建群组失败");
 }
 
 void ChatService::AddGroup(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
+    string request_id = requestIdFrom(js);
     int userid = js["id"].get<int>();
     int groupid = js["groupid"].get<int>();
-    _groupModal.AddGroup(userid, groupid, "normal");
+    if (!_groupModal.GroupExists(groupid))
+    {
+        sendAck(conn, ADD_GROUP_MSG_ACK, request_id, 1, "群组不存在");
+        return;
+    }
+    if (_userModal.query(userid).GetId() != userid)
+    {
+        sendAck(conn, ADD_GROUP_MSG_ACK, request_id, 2, "用户不存在");
+        return;
+    }
+    if (_groupModal.IsUserInGroup(userid, groupid))
+    {
+        sendAck(conn, ADD_GROUP_MSG_ACK, request_id, 3, "用户已在群内");
+        return;
+    }
+    if (_groupModal.AddGroup(userid, groupid, "normal"))
+    {
+        json extra;
+        extra["groupid"] = groupid;
+        sendAck(conn, ADD_GROUP_MSG_ACK, request_id, 0, "", extra);
+    }
+    else
+    {
+        sendAck(conn, ADD_GROUP_MSG_ACK, request_id, 4, "加入群组失败");
+    }
+}
+
+void ChatService::leaveGroup(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int userid = js["id"].get<int>();
+    int groupid = js["groupid"].get<int>();
+
+    if (!_groupModal.GroupExists(groupid))
+    {
+        sendAck(conn, LEAVE_GROUP_MSG_ACK, request_id, 1, "群组不存在");
+        return;
+    }
+    if (!_groupModal.IsUserInGroup(userid, groupid))
+    {
+        sendAck(conn, LEAVE_GROUP_MSG_ACK, request_id, 2, "用户不在群组中");
+        return;
+    }
+    if (_groupModal.QueryUserRole(userid, groupid) == "creator")
+    {
+        sendAck(conn, LEAVE_GROUP_MSG_ACK, request_id, 3, "群主不能直接退群");
+        return;
+    }
+    if (_groupModal.RemoveGroupUser(userid, groupid))
+    {
+        sendAck(conn, LEAVE_GROUP_MSG_ACK, request_id, 0, "");
+    }
+    else
+    {
+        sendAck(conn, LEAVE_GROUP_MSG_ACK, request_id, 4, "退群失败");
+    }
+}
+
+void ChatService::setGroupRole(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int operator_id = js["id"].get<int>();
+    int groupid = js["groupid"].get<int>();
+    int target_id = js["targetid"].get<int>();
+    string target_role = js["role"].get<string>();
+
+    if (target_role != "normal" && target_role != "admin")
+    {
+        sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, 1, "角色非法");
+        return;
+    }
+    if (!_groupModal.GroupExists(groupid))
+    {
+        sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, 2, "群组不存在");
+        return;
+    }
+    if (_groupModal.QueryUserRole(operator_id, groupid) != "creator")
+    {
+        sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, 3, "仅群主可修改角色");
+        return;
+    }
+    if (!_groupModal.IsUserInGroup(target_id, groupid))
+    {
+        sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, 4, "目标用户不在群组中");
+        return;
+    }
+    if (_groupModal.UpdateUserRole(target_id, groupid, target_role))
+    {
+        sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, 0, "");
+    }
+    else
+    {
+        sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, 5, "更新角色失败");
+    }
 }
 
 void ChatService::groupChat(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
+    string request_id = requestIdFrom(js);
     int userid = js["id"].get<int>();
     int groupid = js["groupid"].get<int>();
+    if (!_groupModal.GroupExists(groupid))
+    {
+        sendAck(conn, GROUP_CHAT_MSG_ACK, request_id, 1, "群组不存在");
+        return;
+    }
+    if (!_groupModal.IsUserInGroup(userid, groupid))
+    {
+        sendAck(conn, GROUP_CHAT_MSG_ACK, request_id, 2, "用户不在群组中");
+        return;
+    }
+
+    long long message_id = _messageHistoryModal.insertGroup(request_id, userid, groupid, js["msg"].get<string>());
+    if (message_id < 0)
+    {
+        sendAck(conn, GROUP_CHAT_MSG_ACK, request_id, 3, "群聊消息入库失败");
+        return;
+    }
+
+    js["message_id"] = message_id;
+    js["read_state"] = "unread";
     vector<int> useridVec = _groupModal.QueryGroupUsers(userid, groupid);
 
+    int deliver_count = 0;
     lock_guard<mutex> lock(_mtx);
     for (int id : useridVec)
     {
@@ -350,13 +531,90 @@ void ChatService::groupChat(const TcpConnectionPtr &conn, json &js, Timestamp ti
         {
             // 转发消息
             it->second->send(js.dump());
+            ++deliver_count;
         }
         else
         {
             // 离线消息
-            _offlineMsgModal.insert(id, js.dump());
+            _offlineMsgModal.insert(id, js.dump(), request_id);
         }
     }
+
+    json extra;
+    extra["message_id"] = message_id;
+    extra["deliver_count"] = deliver_count;
+    sendAck(conn, GROUP_CHAT_MSG_ACK, request_id, 0, "", extra);
+}
+
+void ChatService::markRead(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int userid = js["id"].get<int>();
+    long long message_id = js["message_id"].get<long long>();
+
+    if (_messageHistoryModal.markRead(message_id, userid))
+    {
+        sendAck(conn, MARK_READ_MSG_ACK, request_id, 0, "");
+    }
+    else
+    {
+        sendAck(conn, MARK_READ_MSG_ACK, request_id, 1, "标记已读失败");
+    }
+}
+
+void ChatService::recallMessage(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int userid = js["id"].get<int>();
+    long long message_id = js["message_id"].get<long long>();
+
+    if (!_messageHistoryModal.recallMessage(message_id, userid))
+    {
+        sendAck(conn, RECALL_MSG_ACK, request_id, 1, "撤回失败");
+        return;
+    }
+
+    json notify;
+    notify["msgid"] = RECALL_NOTIFY_MSG;
+    notify["request_id"] = request_id;
+    notify["message_id"] = message_id;
+    notify["operator_id"] = userid;
+
+    if (js.contains("toid"))
+    {
+        int toid = js["toid"].get<int>();
+        lock_guard<mutex> lock(_mtx);
+        auto it = _userConnMap.find(toid);
+        if (it != _userConnMap.end())
+        {
+            it->second->send(notify.dump());
+        }
+        else
+        {
+            _offlineMsgModal.insert(toid, notify.dump(), request_id);
+        }
+    }
+
+    if (js.contains("groupid"))
+    {
+        int groupid = js["groupid"].get<int>();
+        vector<int> users = _groupModal.QueryGroupUsers(userid, groupid);
+        lock_guard<mutex> lock(_mtx);
+        for (int uid : users)
+        {
+            auto it = _userConnMap.find(uid);
+            if (it != _userConnMap.end())
+            {
+                it->second->send(notify.dump());
+            }
+            else
+            {
+                _offlineMsgModal.insert(uid, notify.dump(), request_id);
+            }
+        }
+    }
+
+    sendAck(conn, RECALL_MSG_ACK, request_id, 0, "");
 }
 
 void ChatService::handleRedisSubscribeMessage(int userid, string msg)

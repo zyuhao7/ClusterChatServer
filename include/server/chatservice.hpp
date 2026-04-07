@@ -9,6 +9,7 @@
 #include "usermodal.hpp"
 #include "friendmodal.hpp"
 #include "groupmoodal.hpp"
+#include "messagehistorymodal.hpp"
 #include "redis.hpp"
 using namespace std;
 using namespace muduo;
@@ -46,11 +47,22 @@ public:
   void createGroup(const TcpConnectionPtr &conn, json &js, Timestamp time);
   // 加入群组服务
   void AddGroup(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  // 退出群组
+  void leaveGroup(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  // 设置群成员角色
+  void setGroupRole(const TcpConnectionPtr &conn, json &js, Timestamp time);
   // 群聊天服务
   void groupChat(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  // 标记消息已读
+  void markRead(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  // 撤回消息
+  void recallMessage(const TcpConnectionPtr &conn, json &js, Timestamp time);
 
 private:
   ChatService();
+  string requestIdFrom(const json &js) const;
+  void sendAck(const TcpConnectionPtr &conn, int ack_msgid, const string &request_id,
+               int err_no, const string &err_msg, const json &extra = json::object()) const;
   // 存储消息id和其对应的业务处理方法
   unordered_map<int, MsgHandler> _msgHandlerMap;
   // 存储在线用户的通信连接
@@ -61,6 +73,7 @@ private:
   OfflineMsgModal _offlineMsgModal;
   FriendModal _friendModal;
   GroupModal _groupModal;
+  MessageHistoryModal _messageHistoryModal;
 
   // 定义互斥锁, 保证 _userConnMap线程安全
   mutex _mtx;

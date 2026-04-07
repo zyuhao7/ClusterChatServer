@@ -10,7 +10,7 @@ class OfflineMsgModal
 {
 public:
     // 插入离线消息
-    void insert(int userid, string msg);
+    void insert(int userid, string msg, const string &request_id = "");
     // 删除用户的离线消息
     void remove(int userid);
     // 查询用户的离线消息

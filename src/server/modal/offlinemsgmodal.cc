@@ -2,10 +2,11 @@
 #include "db.h"
 #include <cstdio>
 
-void OfflineMsgModal::insert(int userid, string msg)
+void OfflineMsgModal::insert(int userid, string msg, const string &request_id)
 {
-    char sql[1024] = {0};
-    sprintf(sql, "insert into offlinemessage values(%d, '%s')", userid, msg.c_str());
+    char sql[2048] = {0};
+    sprintf(sql, "insert into offlinemessage(userid, message, request_id) values(%d, '%s', '%s')",
+            userid, msg.c_str(), request_id.c_str());
     MySQL mysql;
     if(mysql.connect())
     {
@@ -27,7 +28,7 @@ void OfflineMsgModal::remove(int userid)
 vector<string> OfflineMsgModal::query(int userid)
 {
     char sql[1024] = {0};
-    sprintf(sql, "select message from offlinemessage where userid = %d", userid);
+    sprintf(sql, "select message from offlinemessage where userid = %d order by id asc", userid);
     vector<string> vec;
     MySQL mysql;
     if(mysql.connect())

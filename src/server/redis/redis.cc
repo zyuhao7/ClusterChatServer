@@ -1,4 +1,5 @@
 #include "redis.hpp"
+#include "appconfig.hpp"
 #include <iostream>
 using namespace std;
 
@@ -22,8 +23,9 @@ Redis::~Redis()
 
 bool Redis::Connect()
 {
+    const RedisSettings &cfg = AppConfig::instance().redis();
     // 负责 publish 发布消息的上下文连接
-    _publish_context = redisConnect("127.0.0.1", 6379);
+    _publish_context = redisConnect(cfg.host.c_str(), cfg.port);
     if (nullptr == _publish_context)
     {
         cerr << "connect redis server failed!" << endl;
@@ -31,7 +33,7 @@ bool Redis::Connect()
     }
 
     // 负责 subscribe 订阅消息的上下文连接
-    _subcribe_context = redisConnect("127.0.0.1", 6379);
+    _subcribe_context = redisConnect(cfg.host.c_str(), cfg.port);
     if (nullptr == _subcribe_context)
     {
         cerr << "connect redis server failed!" << endl;

@@ -1,6 +1,7 @@
 #include "chatserver.hpp"
 #include "json.hpp"
 #include "chatservice.hpp"
+#include "appconfig.hpp"
 #include <iostream>
 #include <functional>
 #include <string>
@@ -16,7 +17,7 @@ ChatServer::ChatServer(EventLoop *loop,
 {
     _server.setConnectionCallback(std::bind(&ChatServer::onConnection, this, _1));
     _server.setMessageCallback(std::bind(&ChatServer::onMessage, this, _1, _2, _3));
-    _server.setThreadNum(4);
+    _server.setThreadNum(AppConfig::instance().server().thread_num);
 }
 
 void ChatServer::start()
@@ -40,11 +41,30 @@ void ChatServer::onMessage(const TcpConnectionPtr &conn,
 {
     string buf = buffer->retrieveAllAsString();
 
-    cout << buf << endl;
-    // 数据反序列化
-    json js = json::parse(buf);
-    // 目的: 解耦网络模块和业务模块
-    // 通过 js["msgid"] 获取业务模块对应的 handler 然后执行
-    auto msgHandler = ChatService::instance()->getHandler(js["msgid"].get<int>());
-    msgHandler(conn, js, time);
+    try
+    {
+        json js = json::parse(buf);
+        if (!js.contains("msgid"))
+        {
+            json resp;
+            resp["msgid"] = -1;
+            resp["request_id"] = js.value("request_id", "");
+            resp["errno"] = 400;
+            resp["errmsg"] = "missing msgid";
+            conn->send(resp.dump());
+            return;
+        }
+
+        auto msgHandler = ChatService::instance()->getHandler(js["msgid"].get<int>());
+        msgHandler(conn, js, time);
+    }
+    catch (const std::exception &e)
+    {
+        json resp;
+        resp["msgid"] = -1;
+        resp["request_id"] = "";
+        resp["errno"] = 400;
+        resp["errmsg"] = string("invalid json: ") + e.what();
+        conn->send(resp.dump());
+    }
 }

@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+option(BUILD_TESTS "Build unit tests" ON)
 
 # 配置最终可执行文件的输出路径
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
@@ -114,6 +115,8 @@ include_directories(${PROJECT_SOURCE_DIR}/include/server)
 include_directories(${PROJECT_SOURCE_DIR}/include/server/db)
 include_directories(${PROJECT_SOURCE_DIR}/include/server/modal)
 include_directories(${PROJECT_SOURCE_DIR}/include/server/redis)
+include_directories(${PROJECT_SOURCE_DIR}/include/server/config)
+include_directories(${PROJECT_SOURCE_DIR}/include/server/security)
 include_directories(${PROJECT_SOURCE_DIR}/thirdparty)
 include_directories(${MUDUO_INCLUDE_DIR})
 include_directories(${MYSQL_INCLUDE_DIR})
@@ -121,3 +124,6 @@ include_directories(${HIREDIS_INCLUDE_DIR})
 
 # 加载子目录
 add_subdirectory(src)
+if(BUILD_TESTS)
+    add_subdirectory(tests/cpp)
+endif()

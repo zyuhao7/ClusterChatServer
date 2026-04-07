@@ -12,6 +12,7 @@
 #include <ctime>
 #include <unordered_map>
 #include <functional>
+#include <sstream>
 using namespace std;
 using json = nlohmann::json;
 
@@ -37,6 +38,15 @@ bool isMainMenuRunning = false;
 sem_t rwsem;
 // 记录登录状态
 atomic_bool g_isLoginSuccess{false};
+atomic_ullong g_requestIdCounter{1};
+
+string nextRequestId()
+{
+    unsigned long long id = g_requestIdCounter.fetch_add(1);
+    std::ostringstream oss;
+    oss << "req-" << id;
+    return oss.str();
+}
 
 // 接收线程
 void readTaskHandler(int clientfd);
@@ -119,6 +129,7 @@ int main(int argc, char **argv)
 
             json js;
             js["msgid"] = LOGIN_MSG;
+            js["request_id"] = nextRequestId();
             js["id"] = id;
             js["password"] = pwd;
             string request = js.dump(); // 将json对象序列化为字符串
@@ -152,6 +163,7 @@ int main(int argc, char **argv)
 
             json js;
             js["msgid"] = REG_MSG;
+            js["request_id"] = nextRequestId();
             js["name"] = name;
             js["password"] = pwd;
             string request = js.dump();
@@ -183,7 +195,7 @@ void doRegResponse(json &response)
 {
     if (0 != response["errno"].get<int>()) // 注册失败
     {
-        cerr << "name is already exist, register error!" << endl;
+        cerr << "register error: " << response.value("errmsg", "unknown error") << endl;
     }
     else // 注册成功
     {
@@ -300,6 +312,32 @@ void doAddFriendResponse(json &response)
     cout << endl;
 }
 
+void doGenericAck(const string &title, json &response)
+{
+    int err = response.value("errno", 1);
+    if (err == 0)
+    {
+        cout << title << " success";
+        if (response.contains("groupid"))
+        {
+            cout << ", groupid: " << response["groupid"].get<int>();
+        }
+        if (response.contains("message_id"))
+        {
+            cout << ", message_id: " << response["message_id"].get<long long>();
+        }
+        if (response.contains("deliver_count"))
+        {
+            cout << ", deliver_count: " << response["deliver_count"].get<int>();
+        }
+        cout << endl;
+    }
+    else
+    {
+        cerr << title << " failed: " << response.value("errmsg", "unknown error") << endl;
+    }
+}
+
 // 子线程-接收线程
 void readTaskHandler(int clientfd)
 {
@@ -324,7 +362,16 @@ void readTaskHandler(int clientfd)
         {
             // 私聊消息
             cout << js["time"].get<string>() << " [" << js["id"].get<int>() << "] " << js["name"].get<string>()
-                 << " said: " << js["msg"].get<string>() << endl;
+                 << " said: " << js["msg"].get<string>();
+            if (js.contains("message_id"))
+            {
+                cout << " (message_id=" << js["message_id"].get<long long>() << ")";
+            }
+            if (js.contains("read_state"))
+            {
+                cout << " [" << js["read_state"].get<string>() << "]";
+            }
+            cout << endl;
             continue;
         }
         else if (GROUP_CHAT_MSG == msgtype)
@@ -332,7 +379,12 @@ void readTaskHandler(int clientfd)
             // 群聊消息
             cout << "群消息[" << js["groupid"].get<int>() << "]: "
                  << js["time"].get<string>() << " [" << js["id"].get<int>() << "] "
-                 << js["name"].get<string>() << " said: " << js["msg"].get<string>() << endl;
+                 << js["name"].get<string>() << " said: " << js["msg"].get<string>();
+            if (js.contains("message_id"))
+            {
+                cout << " (message_id=" << js["message_id"].get<long long>() << ")";
+            }
+            cout << endl;
             continue;
         }
         else if (LOGIN_MSG_ACK == msgtype)
@@ -353,6 +405,57 @@ void readTaskHandler(int clientfd)
         {
             // 添加好友响应消息
             doAddFriendResponse(js);
+            continue;
+        }
+        else if (CREATE_GROUP_MSG_ACK == msgtype)
+        {
+            doGenericAck("create group", js);
+            continue;
+        }
+        else if (ADD_GROUP_MSG_ACK == msgtype)
+        {
+            doGenericAck("add group", js);
+            continue;
+        }
+        else if (GROUP_CHAT_MSG_ACK == msgtype)
+        {
+            doGenericAck("group chat", js);
+            continue;
+        }
+        else if (ONE_CHAT_MSG_ACK == msgtype)
+        {
+            doGenericAck("one chat", js);
+            continue;
+        }
+        else if (LOGINOUT_MSG_ACK == msgtype)
+        {
+            doGenericAck("logout", js);
+            continue;
+        }
+        else if (LEAVE_GROUP_MSG_ACK == msgtype)
+        {
+            doGenericAck("leave group", js);
+            continue;
+        }
+        else if (SET_GROUP_ROLE_MSG_ACK == msgtype)
+        {
+            doGenericAck("set group role", js);
+            continue;
+        }
+        else if (MARK_READ_MSG_ACK == msgtype)
+        {
+            doGenericAck("mark read", js);
+            continue;
+        }
+        else if (RECALL_MSG_ACK == msgtype)
+        {
+            doGenericAck("recall message", js);
+            continue;
+        }
+        else if (RECALL_NOTIFY_MSG == msgtype)
+        {
+            cout << "message recalled, message_id=" << js["message_id"].get<long long>()
+                 << ", operator=" << js["operator_id"].get<int>() << endl;
             continue;
         }
     }
@@ -400,6 +503,14 @@ void addgroup(int, string);
 void groupchat(int, string);
 // "loginout" command handler
 void loginout(int, string);
+// "leavegroup" command handler
+void leavegroup(int, string);
+// "setrole" command handler
+void setrole(int, string);
+// "readmsg" command handler
+void readmsg(int, string);
+// "recall" command handler
+void recallmsg(int, string);
 
 // 系统支持的客户端命令列表
 unordered_map<string, string> commandMap = {
@@ -408,7 +519,11 @@ unordered_map<string, string> commandMap = {
     {"addfriend", "添加好友,格式addfriend:friendid"},
     {"creategroup", "创建群组,格式creategroup:groupname:groupdesc"},
     {"addgroup", "加入群组,格式addgroup:groupid"},
+    {"leavegroup", "退出群组,格式leavegroup:groupid"},
+    {"setrole", "设置群成员角色,格式setrole:groupid:userid:normal|admin"},
     {"groupchat", "群聊,格式groupchat:groupid:message"},
+    {"readmsg", "标记消息已读,格式readmsg:message_id"},
+    {"recall", "撤回消息,格式recall:message_id[:toid|groupid]"},
     {"loginout", "注销,格式loginout"}};
 
 // 注册系统支持的客户端命令处理
@@ -418,7 +533,11 @@ unordered_map<string, function<void(int, string)>> commandHandlerMap = {
     {"addfriend", addfriend},
     {"creategroup", creategroup},
     {"addgroup", addgroup},
+    {"leavegroup", leavegroup},
+    {"setrole", setrole},
     {"groupchat", groupchat},
+    {"readmsg", readmsg},
+    {"recall", recallmsg},
     {"loginout", loginout}};
 
 // 主聊天页面程序
@@ -468,6 +587,7 @@ void addfriend(int clientfd, string str)
     int friendid = atoi(str.c_str());
     json js;
     js["msgid"] = ADD_FRIEND_MSG;
+    js["request_id"] = nextRequestId();
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["friendid"] = friendid;
 
@@ -496,6 +616,7 @@ void chat(int clientfd, string str)
     string msg = str.substr(idx + 1);
     json js;
     js["msgid"] = ONE_CHAT_MSG;
+    js["request_id"] = nextRequestId();
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["name"] = g_CurrentUser.GetName();
     js["toid"] = friendid;
@@ -523,6 +644,7 @@ void creategroup(int clientfd, string str)
     string groupdesc = str.substr(idx + 1);
     json js;
     js["msgid"] = CREATE_GROUP_MSG;
+    js["request_id"] = nextRequestId();
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["groupname"] = groupname;
     js["groupdesc"] = groupdesc;
@@ -541,6 +663,7 @@ void addgroup(int clientfd, string str)
     int groupid = atoi(str.c_str());
     json js;
     js["msgid"] = ADD_GROUP_MSG;
+    js["request_id"] = nextRequestId();
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["groupid"] = groupid;
 
@@ -565,6 +688,7 @@ void groupchat(int clientfd, string str)
     string msg = str.substr(idx + 1);
     json js;
     js["msgid"] = GROUP_CHAT_MSG;
+    js["request_id"] = nextRequestId();
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["name"] = g_CurrentUser.GetName();
     js["groupid"] = groupid;
@@ -584,6 +708,7 @@ void loginout(int clientfd, string)
 {
     json js;
     js["msgid"] = LOGINOUT_MSG;
+    js["request_id"] = nextRequestId();
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
 
     string request = js.dump();
@@ -596,6 +721,114 @@ void loginout(int clientfd, string)
     {
         isMainMenuRunning = false; // 退出主菜单页面
         cout << "Login out successfully!" << endl;
+    }
+}
+
+void leavegroup(int clientfd, string str)
+{
+    int groupid = atoi(str.c_str());
+    json js;
+    js["msgid"] = LEAVE_GROUP_MSG;
+    js["request_id"] = nextRequestId();
+    js["id"] = g_CurrentUser.GetId();
+    js["groupid"] = groupid;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send leave group msg error: " << request << endl;
+    }
+}
+
+void setrole(int clientfd, string str)
+{
+    int first = str.find(":");
+    int second = str.find(":", first + 1);
+    if (first == -1 || second == -1)
+    {
+        cerr << "invalid setrole format, please use: setrole:groupid:userid:normal|admin" << endl;
+        return;
+    }
+    int groupid = atoi(str.substr(0, first).c_str());
+    int targetid = atoi(str.substr(first + 1, second - first - 1).c_str());
+    string role = str.substr(second + 1);
+
+    json js;
+    js["msgid"] = SET_GROUP_ROLE_MSG;
+    js["request_id"] = nextRequestId();
+    js["id"] = g_CurrentUser.GetId();
+    js["groupid"] = groupid;
+    js["targetid"] = targetid;
+    js["role"] = role;
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send set role msg error: " << request << endl;
+    }
+}
+
+void readmsg(int clientfd, string str)
+{
+    long long message_id = atoll(str.c_str());
+    json js;
+    js["msgid"] = MARK_READ_MSG;
+    js["request_id"] = nextRequestId();
+    js["id"] = g_CurrentUser.GetId();
+    js["message_id"] = message_id;
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send mark read msg error: " << request << endl;
+    }
+}
+
+void recallmsg(int clientfd, string str)
+{
+    int idx = str.find(":");
+    long long message_id = 0;
+    int target = -1;
+    bool is_group = false;
+    if (idx == -1)
+    {
+        message_id = atoll(str.c_str());
+    }
+    else
+    {
+        message_id = atoll(str.substr(0, idx).c_str());
+        int second = str.find(":", idx + 1);
+        if (second == -1)
+        {
+            target = atoi(str.substr(idx + 1).c_str());
+        }
+        else
+        {
+            string kind = str.substr(idx + 1, second - idx - 1);
+            target = atoi(str.substr(second + 1).c_str());
+            is_group = (kind == "groupid" || kind == "group");
+        }
+    }
+
+    json js;
+    js["msgid"] = RECALL_MSG;
+    js["request_id"] = nextRequestId();
+    js["id"] = g_CurrentUser.GetId();
+    js["message_id"] = message_id;
+    if (target > 0)
+    {
+        if (is_group)
+        {
+            js["groupid"] = target;
+        }
+        else
+        {
+            js["toid"] = target;
+        }
+    }
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send recall msg error: " << request << endl;
     }
 }
 

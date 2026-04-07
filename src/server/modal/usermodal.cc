@@ -53,6 +53,34 @@ User UserModal::query(int id)
     return  User();
 }
 
+User UserModal::queryByName(const string &name)
+{
+    char sql[1024] = {0};
+    sprintf(sql, "select * from user where name = '%s' limit 1", name.c_str());
+
+    MySQL mysql;
+    if(mysql.connect())
+    {
+        MYSQL_RES* res = mysql.query(sql);
+        if(res != nullptr)
+        {
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if (row != nullptr)
+            {
+                User user;
+                user.SetId(atoi(row[0]));
+                user.SetName(row[1]);
+                user.SetPwd(row[2]);
+                user.SetState(row[3]);
+                mysql_free_result(res);
+                return user;
+            }
+            mysql_free_result(res);
+        }
+    }
+    return User();
+}
+
 bool UserModal::updateState(User& user)
 {
      // 1. 组装 sql 语句
@@ -66,6 +94,18 @@ bool UserModal::updateState(User& user)
             return true;
     }
     return  false;
+}
+
+bool UserModal::updatePassword(int id, const string &hashed_password)
+{
+    char sql[2048] = {0};
+    sprintf(sql, "update user set password = '%s' where id = %d", hashed_password.c_str(), id);
+    MySQL mysql;
+    if(mysql.connect())
+    {
+        return mysql.update(sql);
+    }
+    return false;
 }
 
 void UserModal::resetState()

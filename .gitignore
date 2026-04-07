@@ -1,5 +1,9 @@
 # Local tooling
 .codex
+*.tmp
+*.log
+*.swp
+*.bak
 
 # C/C++ build outputs
 /bin/
@@ -25,6 +29,9 @@ __pycache__/
 # admin_service local files
 /admin_service/.env
 /admin_service/.venv/
+
+# local runtime config overrides
+/config/server.local.conf
 
 # OS/editor
 .DS_Store

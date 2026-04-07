@@ -1,49 +1,4 @@
-CREATE DATABASE IF NOT EXISTS chat;
 USE chat;
-
-CREATE TABLE IF NOT EXISTS user (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(50) NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    state VARCHAR(20) NOT NULL DEFAULT 'offline'
-);
-
-CREATE TABLE IF NOT EXISTS friend (
-    userid INT NOT NULL,
-    friendid INT NOT NULL,
-    PRIMARY KEY (userid, friendid),
-    CONSTRAINT chk_friend_not_self CHECK (userid <> friendid),
-    CONSTRAINT fk_friend_user FOREIGN KEY (userid) REFERENCES user(id) ON DELETE CASCADE,
-    CONSTRAINT fk_friend_friend FOREIGN KEY (friendid) REFERENCES user(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS allgroup (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    groupname VARCHAR(50) NOT NULL,
-    groupdesc VARCHAR(255) DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS groupuser (
-    groupid INT NOT NULL,
-    userid INT NOT NULL,
-    grouprole VARCHAR(20) NOT NULL DEFAULT 'normal',
-    PRIMARY KEY (groupid, userid),
-    CONSTRAINT fk_groupuser_group FOREIGN KEY (groupid) REFERENCES allgroup(id) ON DELETE CASCADE,
-    CONSTRAINT fk_groupuser_user FOREIGN KEY (userid) REFERENCES user(id) ON DELETE CASCADE,
-    INDEX idx_groupuser_userid (userid),
-    INDEX idx_groupuser_role (grouprole)
-);
-
-CREATE TABLE IF NOT EXISTS offlinemessage (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    userid INT NOT NULL,
-    message VARCHAR(1024) NOT NULL,
-    request_id VARCHAR(64) DEFAULT '',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_offlinemessage_user FOREIGN KEY (userid) REFERENCES user(id) ON DELETE CASCADE,
-    INDEX idx_offlinemsg_userid (userid),
-    INDEX idx_offlinemsg_created_at (created_at)
-);
 
 CREATE TABLE IF NOT EXISTS message_history (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

@@ -7,7 +7,9 @@ class UserModal
 public:
     bool Insert(User& user);
     User query(int id);
+    User queryByName(const string &name);
     bool updateState(User& user);
+    bool updatePassword(int id, const string &hashed_password);
     void resetState();
 };
 

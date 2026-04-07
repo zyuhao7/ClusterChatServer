@@ -5,12 +5,6 @@
 #include <mysql/mysql.h>
 using namespace std;
 
-// 数据库配置信息
-static string server = "127.0.0.1";
-static string user = "root";
-static string password = "123456";
-static string dbname = "chat";
-
 // 数据库操作类
 class MySQL
 {

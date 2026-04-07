@@ -1,12 +1,22 @@
 #include "db.h"
+#include "appconfig.hpp"
 
 bool MySQL::connect()
 {
-    MYSQL *p = mysql_real_connect(_conn, server.c_str(), user.c_str(),
-    password.c_str(), dbname.c_str(), 3306, nullptr, 0);
+    const DbSettings &cfg = AppConfig::instance().db();
+    MYSQL *p = mysql_real_connect(
+        _conn,
+        cfg.host.c_str(),
+        cfg.user.c_str(),
+        cfg.password.c_str(),
+        cfg.database.c_str(),
+        cfg.port,
+        nullptr,
+        0);
     if (p != nullptr)
     {
-         mysql_query(_conn, "set names gbk");
+         string charset_sql = "set names " + cfg.charset;
+         mysql_query(_conn, charset_sql.c_str());
          LOG_INFO << "connect mysql success!";
     }
     else{
