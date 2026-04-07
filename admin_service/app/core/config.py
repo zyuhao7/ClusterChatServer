@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     mysql_user: str = "root"
     mysql_password: str = "123456"
     mysql_database: str = "chat"
+    admin_token: str = "change-me"
+    redis_host: str = "127.0.0.1"
+    redis_port: int = 6379
+    moderation_sensitive_words: str = "spam,ad,scam"
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
@@ -46,6 +50,10 @@ class Settings(BaseSettings):
             f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}"
         )
+
+    @property
+    def sensitive_words(self) -> list[str]:
+        return [w.strip().lower() for w in self.moderation_sensitive_words.split(",") if w.strip()]
 
 
 settings = Settings()
