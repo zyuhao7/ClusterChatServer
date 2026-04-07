@@ -1,0 +1,32 @@
+{
+  "title": "ClusterChatServer Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Online Users",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "targets": [{"expr": "chat_online_users", "refId": "A"}]
+    },
+    {
+      "type": "stat",
+      "title": "Total Messages",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "targets": [{"expr": "chat_total_messages", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "MySQL Latency",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "targets": [{"expr": "rate(chat_mysql_latency_seconds_sum[5m])", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Latency",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "targets": [{"expr": "rate(chat_redis_latency_seconds_sum[5m])", "refId": "A"}]
+    }
+  ]
+}
