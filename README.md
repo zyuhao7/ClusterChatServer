@@ -20,6 +20,21 @@ C++ 实现的集群聊天服务器，支持多服务器负载均衡与跨服务�
 - `example/muduo_client.cc`
 - 示例 `makefile`
 - 缺失的标准头文件
+- `.gitignore` 已覆盖构建产物、Python 虚拟环境与本地临时文件
+- `admin_service` 已具备基础管理接口骨架
+
+当前版本新增：
+
+- 统一配置文件：`config/server.conf`
+- 数据库迁移脚本：`db/migrations/`
+- 消息历史、已读/撤回基础字段
+- 统一 ACK 结构与 `request_id`
+- 群组权限校验、退群、角色调整
+- bcrypt 密码哈希与迁移脚本
+- 管理后台审计/封禁接口
+- Prometheus `/metrics`
+- AI mock 能力：敏感词审核、机器人回复、聊天摘要
+- Docker Compose / Prometheus / Grafana 部署骨架
 
 ---
 
@@ -185,10 +200,10 @@ sudo systemctl enable --now nginx
 
 ## 数据库配置
 
-数据库连接配置在：
+数据库连接配置默认从以下文件读取：
 
 ```text
-include/server/db/db.h
+config/server.conf
 ```
 
 默认配置：
@@ -198,7 +213,14 @@ include/server/db/db.h
 - 密码：`123456`
 - 数据库：`chat`
 
-如果你的本机配置不同，请先修改这里。
+如果你的本机配置不同，请先修改该配置文件。
+
+### 服务启动参数
+
+```bash
+./bin/chat_server --config config/server.conf
+./bin/chat_server --config config/server.conf 127.0.0.1 9120
+```
 
 ### 初始化数据库
 
@@ -206,6 +228,14 @@ include/server/db/db.h
 
 ```bash
 mysql -uroot -p < chat.sql
+```
+
+已有数据库升级可按顺序执行：
+
+```bash
+mysql -uroot -p chat < db/migrations/001_constraints_and_indexes.sql
+mysql -uroot -p chat < db/migrations/002_message_history_and_admin_tables.sql
+mysql -uroot -p chat < db/migrations/003_password_hashing_prep.sql
 ```
 
 如果在 Ubuntu 上执行时出现：
@@ -269,10 +299,22 @@ mysql -uchatuser -p chat < chat.sql
 如果使用项目用户，记得同步修改：
 
 ```text
-include/server/db/db.h
+config/server.conf
 ```
 
 中的数据库用户名和密码。
+
+密码哈希一次性迁移脚本：
+
+```bash
+python3 scripts/migrate_passwords.py --user root --database chat
+```
+
+回滚建议见：
+
+```text
+db/MIGRATIONS.md
+```
 
 ---
 
@@ -373,29 +415,45 @@ MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=123456
 MYSQL_DATABASE=chat
+
+ADMIN_TOKEN=change-me
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+MODERATION_SENSITIVE_WORDS=spam,ad,scam
 ```
 
 ### 启动管理后台
 
 ```bash
-cd admin_service
-source .venv/bin/activate
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+cd /home/xh/ClusterChatServer
+source admin_service/.venv/bin/activate
+uvicorn admin_service.app.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
 ### 当前接口
 
 - `GET /`
 - `GET /health`
+- `GET /health/db`
+- `GET /metrics`
 - `GET /api/v1/users`
 - `GET /api/v1/users/{user_id}`
 - `GET /api/v1/friends`
 - `GET /api/v1/groups`
 - `GET /api/v1/offline-messages`
+- `GET /api/v1/history`
+- `POST /api/v1/admin/users/{user_id}/ban`
+- `POST /api/v1/admin/users/{user_id}/unban`
+- `GET /api/v1/admin/audit-logs`
+- `GET /api/v1/admin/operation-logs`
+- `POST /api/v1/ai/moderate`
+- `POST /api/v1/ai/chatbot`
+- `POST /api/v1/ai/summary`
 
 ### 说明
 
 - 当前 `admin_service` 是骨架版本，重点在于提供可扩展结构
+- 推荐从仓库根目录启动，而不是进入 `admin_service/app` 子目录启动
 - 如果 VS Code / Pylance 提示找不到 `sqlalchemy`、`fastapi` 等模块，通常是因为：
   - 还没有安装 `requirements.txt`
   - 或 VS Code 没切换到 `admin_service/.venv` 解释器
@@ -406,6 +464,12 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 Python: Select Interpreter -> admin_service/.venv/bin/python
 ```
 
+管理员接口需要请求头：
+
+```text
+X-Admin-Token: <ADMIN_TOKEN>
+```
+
 ---
 
 ## 运行程序
@@ -413,13 +477,13 @@ Python: Select Interpreter -> admin_service/.venv/bin/python
 ### 启动服务器
 
 ```bash
-./bin/chat_server 127.0.0.1 9120
+./bin/chat_server --config config/server.conf 127.0.0.1 9120
 ```
 
 再开一个终端启动第二个实例：
 
 ```bash
-./bin/chat_server 127.0.0.1 9121
+./bin/chat_server --config config/server.conf 127.0.0.1 9121
 ```
 
 ### nginx TCP 负载均衡示例
@@ -551,8 +615,8 @@ sudo systemctl enable --now nginx
 #### 7）启动后端聊天服务
 
 ```bash
-./bin/chat_server 127.0.0.1 9120
-./bin/chat_server 127.0.0.1 9121
+./bin/chat_server --config config/server.conf 127.0.0.1 9120
+./bin/chat_server --config config/server.conf 127.0.0.1 9121
 ```
 
 ### 启动客户端
@@ -565,6 +629,58 @@ sudo systemctl enable --now nginx
 
 ```bash
 ./bin/chat_client 127.0.0.1 9120
+```
+
+---
+
+## Docker 与观测
+
+一键启动：
+
+```bash
+docker compose up --build -d
+```
+
+或：
+
+```bash
+bash scripts/run_stack.sh
+```
+
+默认暴露端口：
+
+- chat_server: `9120`
+- nginx stream: `8000`
+- admin_service: `8010`
+- Prometheus: `9090`
+- Grafana: `3000`
+
+---
+
+## 测试与快速自检
+
+### C++ smoke test
+
+```bash
+cmake -S . -B build -DBUILD_TESTS=ON
+cmake --build build -j --target cluster_chat_unit
+./build/cluster_chat_unit
+```
+
+### Python 集成测试（admin_service）
+
+```bash
+cd /home/xh/ClusterChatServer
+source admin_service/.venv/bin/activate
+pytest tests/integration/test_admin_service.py -q
+```
+
+### 脚本化健康检查
+
+```bash
+bash scripts/check_admin_service.sh
+bash scripts/check_admin_metrics.sh
+python3 scripts/check_server_roundtrip.py
 ```
 
 ---
@@ -654,7 +770,6 @@ sudo apt install -y libhiredis-dev
 
 - MySQL 没启动
 - `chat` 数据库/表没创建
-- `include/server/db/db.h` 里的用户名密码不对
+- `config/server.conf` 里的数据库用户名密码不对
 
 ---
-
