@@ -1,0 +1,114 @@
+{
+  "tasks": [
+    {
+      "task": "Audit High-Signal Repository Sources",
+      "description": "Collect verified commands, entrypoints, and workflow constraints from executable repository sources.",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Read README.md with top-level build instructions."
+        },
+        {
+          "step": 2,
+          "description": "Read CMakeLists.txt with target and option definitions."
+        },
+        {
+          "step": 3,
+          "description": "Read scripts and test configs with execution commands."
+        },
+        {
+          "step": 4,
+          "description": "Record only facts that have direct file evidence."
+        }
+      ],
+      "acceptance-criteria": "Audit output must list verified build, run, test, migration, and docker commands. Each extracted command must map to at least one repository file. Output must avoid speculative statements.",
+      "test-plan": {
+        "unit": [
+          "Given README.md and CMake files as input, audit output must include a build command that matches file content.",
+          "Given scripts/check_server_roundtrip.py as input, audit output must include the focused roundtrip verification command.",
+          "Given db/MIGRATIONS.md as input, audit output must include migration order 001, 002, 003 with the one-time password migration script."
+        ],
+        "integration": [],
+        "e2e-manual": []
+      },
+      "skills": [
+        "defining-requirements"
+      ],
+      "complete": false
+    },
+    {
+      "task": "Draft Compact AGENTS Guidance",
+      "description": "Update AGENTS.md with concise, source-backed instructions that reduce common agent mistakes.",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Keep short sections for build, run, test, database, docker, boundaries, gotchas."
+        },
+        {
+          "step": 2,
+          "description": "Replace stale command paths with verified command paths."
+        },
+        {
+          "step": 3,
+          "description": "Preserve useful existing guidance with current accuracy."
+        },
+        {
+          "step": 4,
+          "description": "Remove generic advice without repository-specific value."
+        }
+      ],
+      "acceptance-criteria": "AGENTS.md must stay compact and scan-friendly. Guidance must prioritize likely failure points such as wrong test paths and migration order. Every retained command must be verifiable from repository files.",
+      "test-plan": {
+        "unit": [
+          "Given a draft AGENTS.md with mock section content, linter checks must confirm all sections are concise with no long tutorials.",
+          "Given a draft AGENTS.md with mock commands, validation must reject commands that have no matching source file evidence.",
+          "Given a draft AGENTS.md with mock stale paths, validation must replace invalid smoke test paths with a verified path."
+        ],
+        "integration": [
+          "When connected to Task 'Audit High-Signal Repository Sources', each AGENTS.md command must match audited commands and constraints."
+        ],
+        "e2e-manual": []
+      },
+      "skills": [
+        "defining-requirements",
+        "verification-before-completion"
+      ],
+      "complete": false
+    },
+    {
+      "task": "Validate Final AGENTS Document",
+      "description": "Verify final AGENTS.md accuracy, compactness, and consistency against executable repository sources.",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Cross-check each AGENTS.md command against its source file."
+        },
+        {
+          "step": 2,
+          "description": "Confirm each AGENTS.md line addresses a likely agent mistake."
+        },
+        {
+          "step": 3,
+          "description": "Remove ambiguous or duplicate wording from final text."
+        }
+      ],
+      "acceptance-criteria": "Final AGENTS.md must include only high-signal, repo-specific instructions. Commands must be executable from the repository context. Content must remain short enough for a quick ramp-up read.",
+      "test-plan": {
+        "unit": [
+          "Given final AGENTS.md content, section checks must confirm coverage of build, run, test, migration, docker, boundaries, and gotchas.",
+          "Given final AGENTS.md bullets, each bullet must have at least one file-backed rationale from repository sources."
+        ],
+        "integration": [
+          "When connected to Task 'Draft Compact AGENTS Guidance', final validation must report zero conflicts between AGENTS.md and audited source commands."
+        ],
+        "e2e-manual": [
+          "Human review can finish AGENTS.md in under three minutes while retaining enough detail to avoid common repository-specific mistakes."
+        ]
+      },
+      "skills": [
+        "verification-before-completion"
+      ],
+      "complete": false
+    }
+  ]
+}
