@@ -1,114 +1,251 @@
 {
   "tasks": [
     {
-      "task": "Audit High-Signal Repository Sources",
-      "description": "Collect verified commands, entrypoints, and workflow constraints from executable repository sources.",
+      "task": "Establish Deterministic Cpp Test Infrastructure",
+      "description": "Create isolated and repeatable C++ test fixtures for database-backed model verification.",
       "steps": [
         {
           "step": 1,
-          "description": "Read README.md with top-level build instructions."
+          "description": "Create a dedicated test schema template for C++ test runs."
         },
         {
           "step": 2,
-          "description": "Read CMakeLists.txt with target and option definitions."
+          "description": "Add fixture utilities that reset tables before each case."
         },
         {
           "step": 3,
-          "description": "Read scripts and test configs with execution commands."
+          "description": "Wire fixture bootstrap into cluster_chat_unit build target."
         },
         {
           "step": 4,
-          "description": "Record only facts that have direct file evidence."
+          "description": "Document deterministic setup inputs in test README."
         }
       ],
-      "acceptance-criteria": "Audit output must list verified build, run, test, migration, and docker commands. Each extracted command must map to at least one repository file. Output must avoid speculative statements.",
+      "acceptance-criteria": "C++ test runs must initialize an isolated schema before each suite. Fixture reset must leave zero residual rows across repeated runs. cluster_chat_unit must execute fixture bootstrap without manual pre-steps.",
       "test-plan": {
         "unit": [
-          "Given README.md and CMake files as input, audit output must include a build command that matches file content.",
-          "Given scripts/check_server_roundtrip.py as input, audit output must include the focused roundtrip verification command.",
-          "Given db/MIGRATIONS.md as input, audit output must include migration order 001, 002, 003 with the one-time password migration script."
+          "Given fixture reset input with pre-seeded rows, reset utility must return table counts as zero for all managed tables.",
+          "Given two sequential fixture initializations with the same seed set, generated primary keys must match expected deterministic values.",
+          "Given missing fixture config input, bootstrap loader must return explicit failure code with non-empty error message."
         ],
         "integration": [],
         "e2e-manual": []
       },
       "skills": [
-        "defining-requirements"
+        "tdd-workflow",
+        "testing-safe-protocol",
+        "verification-before-completion"
       ],
-      "complete": true
+      "complete": false
     },
     {
-      "task": "Draft Compact AGENTS Guidance",
-      "description": "Update AGENTS.md with concise, source-backed instructions that reduce common agent mistakes.",
+      "task": "Implement Model Layer Unit Tests",
+      "description": "Implement isolated unit tests for UserModel, FriendModel, and GroupModel behaviors using fixture-seeded stub data.",
       "steps": [
         {
           "step": 1,
-          "description": "Keep short sections for build, run, test, database, docker, boundaries, gotchas."
+          "description": "Add UserModel tests for insert, query, state update, password update."
         },
         {
           "step": 2,
-          "description": "Replace stale command paths with verified command paths."
+          "description": "Add UserModel tests for queryByName plus resetState branches."
         },
         {
           "step": 3,
-          "description": "Preserve useful existing guidance with current accuracy."
+          "description": "Add FriendModel tests for insert, query, isFriend behavior."
         },
         {
           "step": 4,
-          "description": "Remove generic advice without repository-specific value."
+          "description": "Add GroupModel tests for create, membership, role query, role update, removal."
+        },
+        {
+          "step": 5,
+          "description": "Add edge case tests for duplicate rows, missing ids, invalid ids."
         }
       ],
-      "acceptance-criteria": "AGENTS.md must stay compact and scan-friendly. Guidance must prioritize likely failure points such as wrong test paths and migration order. Every retained command must be verifiable from repository files.",
+      "acceptance-criteria": "UserModel tests must cover insert, query, queryByName, updateState, updatePassword, resetState. FriendModel tests must cover insert, isFriend, query. GroupModel tests must cover CreateGroup, AddGroup, QueryGroupUsers, QueryUserRole, UpdateUserRole, RemoveGroupUser. All model tests must pass in two consecutive runs with identical results.",
       "test-plan": {
         "unit": [
-          "Given a draft AGENTS.md with mock section content, linter checks must confirm all sections are concise with no long tutorials.",
-          "Given a draft AGENTS.md with mock commands, validation must reject commands that have no matching source file evidence.",
-          "Given a draft AGENTS.md with mock stale paths, validation must replace invalid smoke test paths with a verified path."
+          "Given fixture-seeded user row id=101, UserModel.query(101) must return matching name plus expected state value.",
+          "Given existing username 'alice', UserModel.queryByName('alice') must return id=101 from stub seed set.",
+          "Given FriendModel seed pair (101,102), isFriend(101,102) must return true and isFriend(101,999) must return false.",
+          "Given GroupModel seed with role='creator', QueryUserRole(groupId,userId) must return 'creator' for seeded member.",
+          "Given duplicate AddGroup input for same user plus group, method must reject insertion with deterministic failure result."
         ],
         "integration": [
-          "When connected to Task 'Audit High-Signal Repository Sources', each AGENTS.md command must match audited commands and constraints."
+          "When connected to real layer 'Establish Deterministic Cpp Test Infrastructure', all model tests must execute against isolated schema without cross-case leakage."
         ],
         "e2e-manual": []
       },
       "skills": [
-        "defining-requirements",
+        "tdd-workflow",
+        "testing-safe-protocol",
         "verification-before-completion"
       ],
-      "complete": true
+      "complete": false
     },
     {
-      "task": "Validate Final AGENTS Document",
-      "description": "Verify final AGENTS.md accuracy, compactness, and consistency against executable repository sources.",
+      "task": "Implement ChatService Logic Unit Tests",
+      "description": "Implement isolated ChatService branch tests with mocked model, redis, and connection dependencies.",
       "steps": [
         {
           "step": 1,
-          "description": "Cross-check each AGENTS.md command against its source file."
+          "description": "Create test doubles for model queries, redis publish, TCP connection send."
         },
         {
           "step": 2,
-          "description": "Confirm each AGENTS.md line addresses a likely agent mistake."
+          "description": "Add login branch tests with valid payload plus wrong-password payload."
         },
         {
           "step": 3,
-          "description": "Remove ambiguous or duplicate wording from final text."
+          "description": "Add registration branch tests for success plus duplicate account payloads."
+        },
+        {
+          "step": 4,
+          "description": "Add add-friend branch tests for success plus nonexistent target payloads."
+        },
+        {
+          "step": 5,
+          "description": "Add group-chat branch tests for joined member plus non-member payloads."
+        },
+        {
+          "step": 6,
+          "description": "Assert ACK errno plus errmsg outputs for each failure branch."
         }
       ],
-      "acceptance-criteria": "Final AGENTS.md must include only high-signal, repo-specific instructions. Commands must be executable from the repository context. Content must remain short enough for a quick ramp-up read.",
+      "acceptance-criteria": "ChatService unit tests must cover login, registration, add-friend, and group-chat key branches. Failure branches must assert errno and errmsg outputs for each invalid condition. Tests must verify request_id echo behavior in ACK payloads where protocol requires it.",
       "test-plan": {
         "unit": [
-          "Given final AGENTS.md content, section checks must confirm coverage of build, run, test, migration, docker, boundaries, and gotchas.",
-          "Given final AGENTS.md bullets, each bullet must have at least one file-backed rationale from repository sources."
+          "Given mocked UserModel login success response for id=101, login handler must emit ACK errno=0 with matching user id in payload.",
+          "Given mocked password mismatch response, login handler must emit ACK errno!=0 with non-empty errmsg.",
+          "Given mocked duplicate registration response, registration handler must emit ACK errno for duplicate account case.",
+          "Given mocked GroupModel membership=false, group-chat handler must reject send with expected error code.",
+          "Given fixed request_id='r-123', each handler ACK must preserve request_id='r-123' in output JSON."
         ],
         "integration": [
-          "When connected to Task 'Draft Compact AGENTS Guidance', final validation must report zero conflicts between AGENTS.md and audited source commands."
+          "When connected to real layer 'Implement Model Layer Unit Tests', ChatService integration cases must consume actual model outputs for login plus add-friend branches.",
+          "When connected to real layer 'Establish Deterministic Cpp Test Infrastructure', ChatService integration cases must execute with isolated database state per test run."
+        ],
+        "e2e-manual": []
+      },
+      "skills": [
+        "tdd-workflow",
+        "testing-safe-protocol",
+        "systematic-debugging",
+        "verification-before-completion"
+      ],
+      "complete": false
+    },
+    {
+      "task": "Build Python Socket Test Harness",
+      "description": "Create reusable pytest fixtures for socket protocol calls, request id generation, timeout control, and data cleanup.",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Create pytest fixture that opens chat server socket clients."
+        },
+        {
+          "step": 2,
+          "description": "Create helper that sends JSON payload with unique request_id."
+        },
+        {
+          "step": 3,
+          "description": "Create helper that receives ACK within configurable timeout."
+        },
+        {
+          "step": 4,
+          "description": "Create cleanup fixture that removes test users after module run."
+        },
+        {
+          "step": 5,
+          "description": "Package helpers for reuse across registration login friend group tests."
+        }
+      ],
+      "acceptance-criteria": "Pytest harness must provide reusable client fixtures with deterministic request_id generation. ACK helper must fail fast on timeout with explicit assertion context. Cleanup fixture must remove generated test data so repeated suite runs can start from clean state.",
+      "test-plan": {
+        "unit": [
+          "Given mocked socket recv returning fragmented JSON chunks, ACK parser helper must reconstruct valid message object with expected request_id.",
+          "Given no recv data before timeout limit, ACK helper must raise timeout assertion with elapsed milliseconds in message.",
+          "Given seed prefix 'itest', request_id helper must produce unique ids across 100 sequential calls."
+        ],
+        "integration": [
+          "When connected to real layer 'Implement ChatService Logic Unit Tests' runtime binary, harness fixture must complete a register-login-logout handshake with ACK errno=0 path.",
+          "When connected to real layer 'Establish Deterministic Cpp Test Infrastructure' database setup, cleanup fixture must leave zero rows for generated test usernames."
+        ],
+        "e2e-manual": []
+      },
+      "skills": [
+        "tdd-workflow",
+        "testing-safe-protocol",
+        "verification-before-completion"
+      ],
+      "complete": false
+    },
+    {
+      "task": "Implement End-to-End Flow Tests And Update Issue Checklist",
+      "description": "Implement pytest flow tests for registration, login, friend addition, and group chat, then update Issue 9 and Issue 10 completion states.",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Add registration flow test with unique account generation."
+        },
+        {
+          "step": 2,
+          "description": "Add login flow test with valid credential assertion."
+        },
+        {
+          "step": 3,
+          "description": "Add add-friend flow test with two prepared users."
+        },
+        {
+          "step": 4,
+          "description": "Add group-chat flow test with creator plus joined members."
+        },
+        {
+          "step": 5,
+          "description": "Add negative tests for duplicate friend, missing group, unauthorized send."
+        },
+        {
+          "step": 6,
+          "description": "Update Issue 9 checklist boxes to checked state."
+        },
+        {
+          "step": 7,
+          "description": "Update Issue 10 checklist boxes to checked state."
+        },
+        {
+          "step": 8,
+          "description": "Update Issue 9 status text to 已完成."
+        },
+        {
+          "step": 9,
+          "description": "Update Issue 10 status text to 已完成."
+        }
+      ],
+      "acceptance-criteria": "Registration flow test must create a new account and receive success ACK. Login flow test must receive success ACK with valid user id. Add-friend flow test must create relation visible to friend query results. Group-chat flow test must deliver message to joined members within timeout budget. GITHUB_ISSUES_TODO.md must mark Issue 9 and Issue 10 acceptance boxes as checked with status 已完成.",
+      "test-plan": {
+        "unit": [
+          "Given mocked ACK payload for registration success, response validator must classify case as pass with expected errno=0.",
+          "Given mocked friend-list payload missing target id, friend assertion helper must fail with explicit missing id message.",
+          "Given mocked group message event with request_id mismatch, event matcher must reject event plus report expected request_id."
+        ],
+        "integration": [
+          "When connected to real layer 'Build Python Socket Test Harness', registration plus login flows must pass against running chat server instance.",
+          "When connected to real layer 'Implement ChatService Logic Unit Tests' validated runtime, add-friend flow must return success ACK plus updated friend query result.",
+          "When connected to real layer 'Build Python Socket Test Harness' with three clients, group-chat flow must deliver one sent message to each joined member client."
         ],
         "e2e-manual": [
-          "Human review can finish AGENTS.md in under three minutes while retaining enough detail to avoid common repository-specific mistakes."
+          "Human verifies one real multi-client session in terminal where A creates group, B joins group, A sends message, B observes arrival within expected delay.",
+          "Human reviews GITHUB_ISSUES_TODO.md to confirm Issue 9 and Issue 10 show 已完成 with all acceptance checkboxes checked."
         ]
       },
       "skills": [
+        "tdd-workflow",
+        "testing-safe-protocol",
+        "systematic-debugging",
         "verification-before-completion"
       ],
-      "complete": true
+      "complete": false
     }
   ]
 }
