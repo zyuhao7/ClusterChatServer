@@ -1,0 +1,67 @@
+================================================================================
+TASK ID: task-audit-high-signal-repository-sources
+TASK NAME: Audit High-Signal Repository Sources
+STATUS: complete
+TIMESTAMP: 2026-04-10T09:07:12Z
+WORKER AGENT: Worker-v2
+================================================================================
+OBJECTIVE (Acceptance Criteria):
+   Audit output must list verified build, run, test, migration, and docker
+   commands. Each extracted command must map to at least one repository file.
+   Output must avoid speculative statements.
+
+STEPS PROVIDED:
+   1. Read README.md with top-level build instructions.
+   2. Read CMakeLists.txt with target and option definitions.
+   3. Read scripts and test configs with execution commands.
+   4. Record only facts that have direct file evidence.
+
+STEPS EXECUTED:
+   ✓ Step 1: Read README.md and extracted build/run/test/migration/docker commands.
+   ✓ Step 2: Read CMakeLists.txt and target CMake files for options/targets/output names.
+   ✓ Step 3: Read scripts/*, tests/cpp/CMakeLists.txt, tests/integration/test_admin_service.py,
+     docker-compose.yml, and Dockerfiles to verify execution commands/entrypoints.
+   ✓ Step 4: Produced fact-only audit with file-backed command mappings.
+
+WORK COMPLETED:
+   1. Collected build commands from README.md and Dockerfile build stage.
+   2. Verified executable entrypoints from src/server/CMakeLists.txt, src/client/CMakeLists.txt,
+      docker-compose.yml, and Dockerfiles.
+   3. Collected run/test/health-check commands from README.md and scripts/*.sh.
+   4. Collected migration commands from README.md and script argument contract from
+      scripts/migrate_passwords.py.
+   5. Produced a non-speculative, file-evidence-backed audit summary.
+
+FILES MODIFIED:
+   - PROGRESS.txt (created)
+
+KEY DECISIONS:
+   - Treated "verified" as "directly present in repository files".
+   - Used repository executable/config sources (CMake, scripts, Docker, test files) plus README
+     command blocks as documented workflow commands.
+   - Excluded environment-specific or inferred commands not explicitly present in files.
+
+BLOCKERS RESOLVED:
+   - None
+
+REMAINING ISSUES:
+   - None
+
+NOTES FOR NEXT AGENT:
+   - If stricter scope is needed, filter to executable/config files only and exclude README docs.
+   - Current audit already includes direct mappings for every listed command.
+
+ACCEPTANCE CRITERIA VERIFICATION:
+   ✓ Criterion 1: List verified build/run/test/migration/docker commands - VERIFIED
+     (commands extracted from README.md, CMake files, scripts, docker-compose.yml, Dockerfiles).
+   ✓ Criterion 2: Each command maps to repository file evidence - VERIFIED
+     (each command tied to at least one concrete file path).
+   ✓ Criterion 3: Avoid speculative statements - VERIFIED
+     (only explicit file content was reported; no inferred behavior beyond file definitions).
+
+TESTING RESULTS:
+   ✓ Verification method: static file-audit against repository sources
+   ✓ Command execution tests: not applicable for this documentation audit task
+   ✓ Consistency review: all listed commands are traceable to file evidence
+
+================================================================================
