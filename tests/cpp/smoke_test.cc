@@ -1,5 +1,8 @@
 #include "appconfig.hpp"
+#include "db_fixture.hpp"
+#include "messagehistorymodal.hpp"
 #include "password.hpp"
+#include "usermodal.hpp"
 
 #include <cassert>
 #include <fstream>
@@ -8,6 +11,12 @@
 
 namespace
 {
+DeterministicDbFixture &dbFixture()
+{
+    static DeterministicDbFixture fixture;
+    return fixture;
+}
+
 void test_app_config_loads_values()
 {
     const std::string path = "/tmp/cluster_chat_unit_test.conf";
@@ -59,6 +68,52 @@ void test_password_legacy_plaintext_compat()
     assert(!PasswordSecurity::verify("legacy", "legacy-other"));
     assert(!PasswordSecurity::isBcryptHash("legacy"));
 }
+
+void test_user_modal_uses_isolated_schema()
+{
+    dbFixture().resetTables();
+
+    UserModal modal;
+    User user;
+    user.SetName("fixture-user");
+    user.SetPwd("secret");
+    user.SetState("online");
+
+    assert(modal.Insert(user));
+    assert(user.GetId() == 1);
+
+    User loaded = modal.query(user.GetId());
+    assert(loaded.GetName() == "fixture-user");
+    assert(loaded.GetPwd() == "secret");
+    assert(loaded.GetState() == "online");
+}
+
+void test_fixture_reset_leaves_zero_residual_rows()
+{
+    dbFixture().resetTables();
+
+    UserModal modal;
+    User alice;
+    alice.SetName("alice");
+    alice.SetPwd("pw-a");
+    assert(modal.Insert(alice));
+
+    User bob;
+    bob.SetName("bob");
+    bob.SetPwd("pw-b");
+    assert(modal.Insert(bob));
+
+    MessageHistoryModal history;
+    assert(history.insertDirect("req-1", alice.GetId(), bob.GetId(), "hello") > 0);
+    assert(dbFixture().rowCount("user") == 2);
+    assert(dbFixture().rowCount("message_history") == 1);
+
+    dbFixture().resetTables();
+
+    assert(dbFixture().rowCount("message_history") == 0);
+    assert(dbFixture().rowCount("friend") == 0);
+    assert(dbFixture().rowCount("user") == 0);
+}
 } // namespace
 
 int main()
@@ -66,6 +121,9 @@ int main()
     test_app_config_loads_values();
     test_password_hash_and_verify();
     test_password_legacy_plaintext_compat();
+    dbFixture().bootstrapSuite();
+    test_user_modal_uses_isolated_schema();
+    test_fixture_reset_leaves_zero_residual_rows();
     std::cout << "cluster_chat_unit passed" << std::endl;
     return 0;
 }
