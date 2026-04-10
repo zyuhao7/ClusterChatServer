@@ -1,4 +1,72 @@
 ================================================================================
+
+================================================================================
+TASK ID: task-draft-compact-agents-guidance
+TASK NAME: Draft Compact AGENTS Guidance
+STATUS: complete
+TIMESTAMP: 2026-04-10T09:13:52Z
+WORKER AGENT: Worker-v2
+================================================================================
+OBJECTIVE (Acceptance Criteria):
+   AGENTS.md must stay compact and scan-friendly. Guidance must prioritize likely
+   failure points such as wrong test paths and migration order. Every retained
+   command must be verifiable from repository files.
+
+STEPS PROVIDED:
+   1. Keep short sections for build, run, test, database, docker, boundaries, gotchas.
+   2. Replace stale command paths with verified command paths.
+   3. Preserve useful existing guidance with current accuracy.
+   4. Remove generic advice without repository-specific value.
+
+STEPS EXECUTED:
+   ✓ Step 1: Reorganized AGENTS.md into compact sections: build, run, test, database,
+     docker, boundaries, gotchas.
+   ✓ Step 2: Replaced/kept commands only after checking repo evidence in CMake files,
+     README.md, scripts/, docker-compose.yml, db/migrations/, and tests/ paths.
+   ✓ Step 3: Preserved accurate high-value guidance (config-file usage, installer
+     boundary, example directory boundary).
+   ✓ Step 4: Removed generic dependency/setup detail not tied to frequent repo-specific
+     mistakes.
+
+WORK COMPLETED:
+   1. Rewrote AGENTS.md into a concise 71-line guide focused on execution-critical commands.
+   2. Kept only repository-backed commands for build/run/test/database/docker workflows.
+   3. Added/kept failure-point warnings for test path confusion and strict migration order.
+   4. Tightened boundaries section to avoid misuse of install.sh and example workflow scope.
+
+FILES MODIFIED:
+   - AGENTS.md (modified)
+   - PROGRESS.txt (modified)
+
+KEY DECISIONS:
+   - Used direct repository evidence as the source of truth for command retention.
+   - Prioritized commands and notes that address common operational failures.
+   - Kept the document compact by removing low-signal generic sections.
+
+BLOCKERS RESOLVED:
+   - Corrected boundary wording from "Makefile" to actual `example/makefile` naming.
+
+REMAINING ISSUES:
+   - None
+
+NOTES FOR NEXT AGENT:
+   - If AGENTS.md is updated again, re-verify each command path against repository files
+     before retaining it.
+
+ACCEPTANCE CRITERIA VERIFICATION:
+   ✓ Criterion 1: AGENTS.md compact and scan-friendly - VERIFIED
+     (reduced to short sectioned format with focused command blocks).
+   ✓ Criterion 2: Prioritizes likely failure points - VERIFIED
+     (explicit gotchas for wrong test path and migration order).
+   ✓ Criterion 3: Every retained command verifiable from repository files - VERIFIED
+     (checked against CMakeLists.txt, src/*/CMakeLists.txt, README.md, scripts/*,
+      docker-compose.yml, db/migrations/*, tests/integration/*).
+
+TESTING RESULTS:
+   ✓ Static verification: command/path evidence validated against repository files
+   ✓ Document review: section structure matches requested compact format
+
+================================================================================
 TASK ID: task-audit-high-signal-repository-sources
 TASK NAME: Audit High-Signal Repository Sources
 STATUS: complete

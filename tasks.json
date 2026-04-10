@@ -73,7 +73,7 @@
         "defining-requirements",
         "verification-before-completion"
       ],
-      "complete": false
+      "complete": true
     },
     {
       "task": "Validate Final AGENTS Document",
