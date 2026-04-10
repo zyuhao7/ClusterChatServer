@@ -1,4 +1,68 @@
 ================================================================================
+TASK ID: task-validate-final-agents-document
+TASK NAME: Validate Final AGENTS Document
+STATUS: complete
+TIMESTAMP: 2026-04-10T09:19:13Z
+WORKER AGENT: Worker-v2
+================================================================================
+OBJECTIVE (Acceptance Criteria):
+   Final AGENTS.md must include only high-signal, repo-specific instructions.
+   Commands must be executable from the repository context. Content must remain
+   short enough for a quick ramp-up read.
+
+STEPS PROVIDED:
+   1. Cross-check each AGENTS.md command against its source file.
+   2. Confirm each AGENTS.md line addresses a likely agent mistake.
+   3. Remove ambiguous or duplicate wording from final text.
+
+STEPS EXECUTED:
+   ✓ Step 1: Cross-checked every AGENTS.md command against repository sources
+     (README.md, CMakeLists.txt, scripts/, db/migrations/, config/, docker-compose.yml).
+   ✓ Step 2: Confirmed each retained line targets common operational mistakes
+     (wrong test path, migration order, config misuse, example workflow boundary).
+   ✓ Step 3: Removed duplicate Docker command path and clarified run-port meaning;
+     corrected test binary path from `./build/cluster_chat_unit` to `./bin/cluster_chat_unit`.
+
+WORK COMPLETED:
+   1. Validated command coverage and source mappings for build/run/test/db/docker sections.
+   2. Tightened Docker section to one canonical command (`bash scripts/run_stack.sh`).
+   3. Added concise port clarification for `chat_client` usage (`9120` direct, `8000` nginx).
+   4. Fixed unit-test binary references to repository-true output path (`bin/cluster_chat_unit`).
+
+FILES MODIFIED:
+   - AGENTS.md (modified)
+   - PROGRESS.txt (modified)
+
+KEY DECISIONS:
+   - Treated CMake output-path semantics and generated build artifacts as source-of-truth
+     for executable paths.
+   - Kept only concise, repo-specific instructions tied to real failure patterns.
+   - Removed redundant command variants when a script wrapper already provides canonical flow.
+
+BLOCKERS RESOLVED:
+   - Resolved stale test-binary path mismatch by using `bin/cluster_chat_unit`.
+
+REMAINING ISSUES:
+   - None
+
+NOTES FOR NEXT AGENT:
+   - If CMake output settings change, re-validate AGENTS binary paths before editing docs.
+
+ACCEPTANCE CRITERIA VERIFICATION:
+   ✓ Criterion 1: Only high-signal, repo-specific instructions - VERIFIED
+     (sections remain focused on project commands, boundaries, and known gotchas only).
+   ✓ Criterion 2: Commands executable from repository context - VERIFIED
+     (paths/commands mapped to README/CMake/scripts, and `bin/` artifacts confirmed present).
+   ✓ Criterion 3: Short quick ramp-up read - VERIFIED
+     (compact 71-line structure preserved with minimal wording).
+
+TESTING RESULTS:
+   ✓ Static verification: command-to-source mapping validated via grep/read checks
+   ✓ Runtime artifact check: `/home/xh/ClusterChatServer/bin` contains
+     `chat_server`, `chat_client`, `cluster_chat_unit`
+   ✓ Consistency review: no ambiguous duplicate Docker command remains
+
+================================================================================
 
 ================================================================================
 TASK ID: task-draft-compact-agents-guidance

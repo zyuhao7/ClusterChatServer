@@ -12,7 +12,7 @@ cmake -S . -B build -DBUILD_TESTS=ON
 cmake --build build -j --target cluster_chat_unit
 ```
 
-Outputs: `bin/chat_server`, `bin/chat_client`, `build/cluster_chat_unit`.
+Outputs: `bin/chat_server`, `bin/chat_client`, `bin/cluster_chat_unit`.
 
 ## Run
 
@@ -24,11 +24,12 @@ Outputs: `bin/chat_server`, `bin/chat_client`, `build/cluster_chat_unit`.
 ```
 
 Use config files, not hardcoded constants: `config/server.conf`, `config/server.docker.conf`.
+Client port `9120` is direct server access; `8000` is nginx stream access.
 
 ## Test
 
 ```bash
-./build/cluster_chat_unit
+./bin/cluster_chat_unit
 source admin_service/.venv/bin/activate
 pytest tests/integration/test_admin_service.py -q
 bash scripts/check_admin_service.sh
@@ -55,7 +56,6 @@ sudo mysql < chat.sql
 ## Docker
 
 ```bash
-docker compose up --build -d
 bash scripts/run_stack.sh
 ```
 
@@ -68,4 +68,4 @@ bash scripts/run_stack.sh
 
 - Common path mistake: use `tests/integration/test_admin_service.py` (not `test/...`).
 - Migration order is strict: `001 -> 002 -> 003`, then run `scripts/migrate_passwords.py` once.
-- `./build/cluster_chat_unit` exists only after building with `-DBUILD_TESTS=ON`.
+- `./bin/cluster_chat_unit` exists only after building with `-DBUILD_TESTS=ON`.
