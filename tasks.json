@@ -1,79 +1,78 @@
 {
   "tasks": [
     {
-      "task": "Establish Deterministic Cpp Test Infrastructure",
-      "description": "Create isolated and repeatable C++ test fixtures for database-backed model verification.",
+      "task": "Establish Local Test Isolation Baseline",
+      "description": "Create deterministic local testing primitives for process startup, port allocation, config generation, data cleanup.",
       "steps": [
         {
           "step": 1,
-          "description": "Create a dedicated test schema template for C++ test runs."
+          "description": "Create local test runtime config template."
         },
         {
           "step": 2,
-          "description": "Add fixture utilities that reset tables before each case."
+          "description": "Implement helper for free localhost ephemeral port selection."
         },
         {
           "step": 3,
-          "description": "Wire fixture bootstrap into cluster_chat_unit build target."
+          "description": "Implement deterministic cleanup hook for generated test rows."
         },
         {
           "step": 4,
-          "description": "Document deterministic setup inputs in test README."
+          "description": "Add preflight check for mysql redis chat_server readiness."
         }
       ],
-      "acceptance-criteria": "C++ test runs must initialize an isolated schema before each suite. Fixture reset must leave zero residual rows across repeated runs. cluster_chat_unit must execute fixture bootstrap without manual pre-steps.",
+      "acceptance-criteria": "Port allocator must return an unused localhost port in range 49152-65535. Runtime config generator must produce test scoped host port mysql redis values without editing production files. Cleanup hook must leave zero residual rows after two consecutive invocations. Preflight check must fail fast with explicit component name on missing dependency.",
       "test-plan": {
         "unit": [
-          "Given fixture reset input with pre-seeded rows, reset utility must return table counts as zero for all managed tables.",
-          "Given two sequential fixture initializations with the same seed set, generated primary keys must match expected deterministic values.",
-          "Given missing fixture config input, bootstrap loader must return explicit failure code with non-empty error message."
+          "Given occupied ports [52000], allocator input range 52000-52002 must return 52001.",
+          "Given base config fixture with placeholders, generator input port 53111 must output server.port=53111 plus host=127.0.0.1.",
+          "Given cleanup input user ids [101,102], cleanup execution must report row count 0 for user friend groupuser message_history tables."
         ],
         "integration": [],
         "e2e-manual": []
       },
       "skills": [
-        "tdd-workflow",
         "testing-safe-protocol",
         "verification-before-completion"
       ],
       "complete": false
     },
     {
-      "task": "Implement Model Layer Unit Tests",
-      "description": "Implement isolated unit tests for UserModel, FriendModel, and GroupModel behaviors using fixture-seeded stub data.",
+      "task": "Expand Modal Unit Test Coverage",
+      "description": "Implement dedicated C++ unit tests for UserModal, FriendModal, GroupModal core behavior plus edge cases.",
       "steps": [
         {
           "step": 1,
-          "description": "Add UserModel tests for insert, query, state update, password update."
+          "description": "Add UserModal insert query state transition test cases."
         },
         {
           "step": 2,
-          "description": "Add UserModel tests for queryByName plus resetState branches."
+          "description": "Add UserModal queryByName password update resetState test cases."
         },
         {
           "step": 3,
-          "description": "Add FriendModel tests for insert, query, isFriend behavior."
+          "description": "Add FriendModal insert isFriend query test cases."
         },
         {
           "step": 4,
-          "description": "Add GroupModel tests for create, membership, role query, role update, removal."
+          "description": "Add GroupModal create membership role mutation test cases."
         },
         {
           "step": 5,
-          "description": "Add edge case tests for duplicate rows, missing ids, invalid ids."
+          "description": "Add negative cases for duplicate relation invalid group missing user."
         }
       ],
-      "acceptance-criteria": "UserModel tests must cover insert, query, queryByName, updateState, updatePassword, resetState. FriendModel tests must cover insert, isFriend, query. GroupModel tests must cover CreateGroup, AddGroup, QueryGroupUsers, QueryUserRole, UpdateUserRole, RemoveGroupUser. All model tests must pass in two consecutive runs with identical results.",
+      "acceptance-criteria": "UserModal tests must cover Insert query queryByName updateState updatePassword resetState. FriendModal tests must cover insert isFriend query for both directions. GroupModal tests must cover CreateGroup AddGroup QueryGroupUsers QueryUserRole UpdateUserRole RemoveGroupUser. Each suite must pass in two consecutive runs with identical assertions.",
       "test-plan": {
         "unit": [
-          "Given fixture-seeded user row id=101, UserModel.query(101) must return matching name plus expected state value.",
-          "Given existing username 'alice', UserModel.queryByName('alice') must return id=101 from stub seed set.",
-          "Given FriendModel seed pair (101,102), isFriend(101,102) must return true and isFriend(101,999) must return false.",
-          "Given GroupModel seed with role='creator', QueryUserRole(groupId,userId) must return 'creator' for seeded member.",
-          "Given duplicate AddGroup input for same user plus group, method must reject insertion with deterministic failure result."
+          "Given fixture seeded user id=101 name='alice', UserModal.query(101) must return name='alice' plus expected state value.",
+          "Given fixture seeded username='alice', UserModal.queryByName('alice') must return id=101.",
+          "Given fixture seeded friend pair (101,102), FriendModal.isFriend(101,102) must return true while isFriend(101,999) must return false.",
+          "Given fixture seeded group member role='creator', GroupModal.QueryUserRole(101,201) must return 'creator'.",
+          "Given duplicate AddGroup input for user 101 group 201, GroupModal.AddGroup must return failure result."
         ],
         "integration": [
-          "When connected to real layer 'Establish Deterministic Cpp Test Infrastructure', all model tests must execute against isolated schema without cross-case leakage."
+          "When connected to real layer 'Establish Local Test Isolation Baseline', all modal unit suites must execute on isolated schema without cross test leakage."
         ],
         "e2e-manual": []
       },
@@ -85,46 +84,42 @@
       "complete": false
     },
     {
-      "task": "Implement ChatService Logic Unit Tests",
-      "description": "Implement isolated ChatService branch tests with mocked model, redis, and connection dependencies.",
+      "task": "Add ChatService Protocol Contract Tests",
+      "description": "Implement isolated ChatService tests for ACK contract, permission checks, failure branches using stubs.",
       "steps": [
         {
           "step": 1,
-          "description": "Create test doubles for model queries, redis publish, TCP connection send."
+          "description": "Introduce chatservice test doubles for connection redis modal dependencies."
         },
         {
           "step": 2,
-          "description": "Add login branch tests with valid payload plus wrong-password payload."
+          "description": "Add login registration ACK contract test cases."
         },
         {
           "step": 3,
-          "description": "Add registration branch tests for success plus duplicate account payloads."
+          "description": "Add add-friend create-group add-group ACK contract test cases."
         },
         {
           "step": 4,
-          "description": "Add add-friend branch tests for success plus nonexistent target payloads."
+          "description": "Add group-chat permission offline delivery failure branch test cases."
         },
         {
           "step": 5,
-          "description": "Add group-chat branch tests for joined member plus non-member payloads."
-        },
-        {
-          "step": 6,
-          "description": "Assert ACK errno plus errmsg outputs for each failure branch."
+          "description": "Assert request_id errno errmsg invariants for each handler."
         }
       ],
-      "acceptance-criteria": "ChatService unit tests must cover login, registration, add-friend, and group-chat key branches. Failure branches must assert errno and errmsg outputs for each invalid condition. Tests must verify request_id echo behavior in ACK payloads where protocol requires it.",
+      "acceptance-criteria": "ChatService tests must validate ACK shape for login reg add-friend group-chat handlers. Failure branches must assert deterministic errno plus non-empty errmsg. Every handler ACK must echo incoming request_id. Permission checks must reject non-member group chat payloads with explicit error code.",
       "test-plan": {
         "unit": [
-          "Given mocked UserModel login success response for id=101, login handler must emit ACK errno=0 with matching user id in payload.",
-          "Given mocked password mismatch response, login handler must emit ACK errno!=0 with non-empty errmsg.",
-          "Given mocked duplicate registration response, registration handler must emit ACK errno for duplicate account case.",
-          "Given mocked GroupModel membership=false, group-chat handler must reject send with expected error code.",
-          "Given fixed request_id='r-123', each handler ACK must preserve request_id='r-123' in output JSON."
+          "Given mock UserModal login success for id=101, login input request_id='r-login-1' must emit ACK errno=0 plus request_id='r-login-1'.",
+          "Given mock password mismatch response, login handler must emit ACK errno!=0 plus non-empty errmsg.",
+          "Given mock duplicate registration result, reg handler must emit expected duplicate errno value.",
+          "Given mock GroupModal membership=false for user 101 group 201, groupChat handler input must emit rejection ACK.",
+          "Given mock addFriend success path, addFriend handler must emit ACK with friendid field equal to target id."
         ],
         "integration": [
-          "When connected to real layer 'Implement Model Layer Unit Tests', ChatService integration cases must consume actual model outputs for login plus add-friend branches.",
-          "When connected to real layer 'Establish Deterministic Cpp Test Infrastructure', ChatService integration cases must execute with isolated database state per test run."
+          "When connected to real layer 'Expand Modal Unit Test Coverage', ChatService integration cases must consume real modal data for login add-friend group membership checks.",
+          "When connected to real layer 'Establish Local Test Isolation Baseline', ChatService integration cases must leave clean state after suite teardown."
         ],
         "e2e-manual": []
       },
@@ -137,40 +132,36 @@
       "complete": false
     },
     {
-      "task": "Build Python Socket Test Harness",
-      "description": "Create reusable pytest fixtures for socket protocol calls, request id generation, timeout control, and data cleanup.",
+      "task": "Build Pytest Local Process Harness",
+      "description": "Create reusable pytest fixtures to drive chat_server via localhost sockets with strict lifecycle cleanup.",
       "steps": [
         {
           "step": 1,
-          "description": "Create pytest fixture that opens chat server socket clients."
+          "description": "Extract socket send receive helpers from roundtrip script."
         },
         {
           "step": 2,
-          "description": "Create helper that sends JSON payload with unique request_id."
+          "description": "Create pytest fixture for chat_server process lifecycle control."
         },
         {
           "step": 3,
-          "description": "Create helper that receives ACK within configurable timeout."
+          "description": "Create fixture for deterministic request_id plus unique usernames."
         },
         {
           "step": 4,
-          "description": "Create cleanup fixture that removes test users after module run."
-        },
-        {
-          "step": 5,
-          "description": "Package helpers for reuse across registration login friend group tests."
+          "description": "Create teardown fixture for generated users friendships groups."
         }
       ],
-      "acceptance-criteria": "Pytest harness must provide reusable client fixtures with deterministic request_id generation. ACK helper must fail fast on timeout with explicit assertion context. Cleanup fixture must remove generated test data so repeated suite runs can start from clean state.",
+      "acceptance-criteria": "Harness fixtures must start chat_server on localhost only with dynamic non-conflicting port. Socket helper must parse ACK payload even with fragmented recv bytes. Teardown fixture must remove generated test users plus group artifacts to allow repeated local runs. Harness failure logs must include request_id plus msgid for triage.",
       "test-plan": {
         "unit": [
-          "Given mocked socket recv returning fragmented JSON chunks, ACK parser helper must reconstruct valid message object with expected request_id.",
-          "Given no recv data before timeout limit, ACK helper must raise timeout assertion with elapsed milliseconds in message.",
-          "Given seed prefix 'itest', request_id helper must produce unique ids across 100 sequential calls."
+          "Given mocked recv chunks ['{\"msgid\":2,','\"errno\":0}'], parser helper must reconstruct valid JSON object with errno=0.",
+          "Given mocked socket timeout after configured 2000 ms, ACK helper must raise assertion that includes timeout value.",
+          "Given seed prefix 'itest', request_id generator must output 100 unique ids with stable prefix."
         ],
         "integration": [
-          "When connected to real layer 'Implement ChatService Logic Unit Tests' runtime binary, harness fixture must complete a register-login-logout handshake with ACK errno=0 path.",
-          "When connected to real layer 'Establish Deterministic Cpp Test Infrastructure' database setup, cleanup fixture must leave zero rows for generated test usernames."
+          "When connected to real layer 'Establish Local Test Isolation Baseline', process fixture must start chat_server locally plus complete health handshake plus stop process in teardown.",
+          "When connected to real layer 'Add ChatService Protocol Contract Tests', harness sockets must exchange register login logout ACK payloads with errno=0 on happy path."
         ],
         "e2e-manual": []
       },
@@ -182,61 +173,56 @@
       "complete": false
     },
     {
-      "task": "Implement End-to-End Flow Tests And Update Issue Checklist",
-      "description": "Implement pytest flow tests for registration, login, friend addition, and group chat, then update Issue 9 and Issue 10 completion states.",
+      "task": "Implement Enhanced Messaging Flow Integration Tests",
+      "description": "Implement enhanced pytest integration coverage for register login add-friend group-chat flows on local process runtime.",
       "steps": [
         {
           "step": 1,
-          "description": "Add registration flow test with unique account generation."
+          "description": "Add register flow tests for success duplicate malformed payload."
         },
         {
           "step": 2,
-          "description": "Add login flow test with valid credential assertion."
+          "description": "Add login flow tests for success wrong-password offline replay."
         },
         {
           "step": 3,
-          "description": "Add add-friend flow test with two prepared users."
+          "description": "Add add-friend flow tests for success duplicate missing-target."
         },
         {
           "step": 4,
-          "description": "Add group-chat flow test with creator plus joined members."
+          "description": "Add group-chat flow tests for member-delivery non-member rejection."
         },
         {
           "step": 5,
-          "description": "Add negative tests for duplicate friend, missing group, unauthorized send."
+          "description": "Add concurrency case for three clients with ordered ACK assertions."
         },
         {
           "step": 6,
-          "description": "Update Issue 9 checklist boxes to checked state."
+          "description": "Update Issue 9 status to 已完成 plus check all remaining boxes."
         },
         {
           "step": 7,
-          "description": "Update Issue 10 checklist boxes to checked state."
-        },
-        {
-          "step": 8,
-          "description": "Update Issue 9 status text to 已完成."
-        },
-        {
-          "step": 9,
-          "description": "Update Issue 10 status text to 已完成."
+          "description": "Update Issue 10 status to 已完成 plus check all remaining boxes."
         }
       ],
-      "acceptance-criteria": "Registration flow test must create a new account and receive success ACK. Login flow test must receive success ACK with valid user id. Add-friend flow test must create relation visible to friend query results. Group-chat flow test must deliver message to joined members within timeout budget. GITHUB_ISSUES_TODO.md must mark Issue 9 and Issue 10 acceptance boxes as checked with status 已完成.",
+      "acceptance-criteria": "Pytest suite must cover register login add-friend group-chat happy paths with errno=0 assertions. Enhanced suite must include negative cases for duplicate user wrong password duplicate friend non-member group send malformed payload. Concurrency case must prove stable ACK matching by request_id across three clients. GITHUB_ISSUES_TODO.md must mark Issue 9 Issue 10 as 已完成 with all acceptance checkboxes checked.",
       "test-plan": {
         "unit": [
-          "Given mocked ACK payload for registration success, response validator must classify case as pass with expected errno=0.",
-          "Given mocked friend-list payload missing target id, friend assertion helper must fail with explicit missing id message.",
-          "Given mocked group message event with request_id mismatch, event matcher must reject event plus report expected request_id."
+          "Given mocked register ACK errno=0 id=501, register validator must mark case pass plus store id=501.",
+          "Given mocked login ACK errno=1 errmsg='password error', login validator must mark case fail with expected errno.",
+          "Given mocked group push message request_id mismatch, event matcher must reject message plus report expected request_id.",
+          "Given mocked concurrent ACK stream with ids [r1,r2,r3], dispatcher must route each ACK to matching waiter without cross assignment."
         ],
         "integration": [
-          "When connected to real layer 'Build Python Socket Test Harness', registration plus login flows must pass against running chat server instance.",
-          "When connected to real layer 'Implement ChatService Logic Unit Tests' validated runtime, add-friend flow must return success ACK plus updated friend query result.",
-          "When connected to real layer 'Build Python Socket Test Harness' with three clients, group-chat flow must deliver one sent message to each joined member client."
+          "When connected to real layer 'Build Pytest Local Process Harness', register flow must create account plus return non-zero user id plus errno=0.",
+          "When connected to real layer 'Build Pytest Local Process Harness', login flow must return success for valid credential plus failure for wrong password.",
+          "When connected to real layer 'Build Pytest Local Process Harness', add-friend flow must return success once plus deterministic failure on duplicate request.",
+          "When connected to real layer 'Build Pytest Local Process Harness', group-chat flow must deliver one message to joined member while rejecting non-member sender.",
+          "When connected to real layer 'Establish Local Test Isolation Baseline', full integration suite must pass on two consecutive local runs with clean teardown state."
         ],
         "e2e-manual": [
-          "Human verifies one real multi-client session in terminal where A creates group, B joins group, A sends message, B observes arrival within expected delay.",
-          "Human reviews GITHUB_ISSUES_TODO.md to confirm Issue 9 and Issue 10 show 已完成 with all acceptance checkboxes checked."
+          "Human verifies terminal session where client A creates group, client B joins group, client A sends message, client B receives message within expected delay.",
+          "Human verifies GITHUB_ISSUES_TODO.md shows Issue 9 plus Issue 10 status as 已完成 with all boxes checked."
         ]
       },
       "skills": [
