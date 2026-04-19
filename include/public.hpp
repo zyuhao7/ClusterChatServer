@@ -42,6 +42,8 @@ enum EnMsgType
     ADD_BLACKLIST_MSG_ACK,// 加入黑名单响应
     REMOVE_BLACKLIST_MSG, // 移出黑名单
     REMOVE_BLACKLIST_MSG_ACK, // 移出黑名单响应
+    SET_USER_STATE_MSG,   // 设置用户状态
+    SET_USER_STATE_MSG_ACK, // 设置用户状态响应
 
 };
 
@@ -99,6 +101,8 @@ enum ChatErrorCode
     ERR_USER_BLOCK_INSERT_FAILED = 4606,
     ERR_USER_UNBLOCK_FAILED = 4607,
     ERR_USER_BLOCKED_RELATION = 4608,
+    ERR_USER_STATE_INVALID = 4609,
+    ERR_USER_STATE_UPDATE_FAILED = 4610,
 };
 
 #endif

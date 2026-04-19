@@ -9,6 +9,7 @@ import subprocess
 import time
 
 ERR_OK = 0
+ERR_AUTH_ALREADY_ONLINE = 4102
 ERR_AUTH_BANNED = 4103
 ERR_GROUP_USER_NOT_FOUND = 4401
 ERR_GROUP_CANNOT_CHANGE_CREATOR_ROLE = 4413
@@ -33,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--group-permission-checks", action="store_true")
     parser.add_argument("--history-pagination-checks", action="store_true")
     parser.add_argument("--search-blacklist-checks", action="store_true")
+    parser.add_argument("--busy-state-checks", action="store_true")
     parser.add_argument("--mysql-host", default="127.0.0.1")
     parser.add_argument("--mysql-port", type=int, default=3306)
     parser.add_argument("--mysql-user", default="root")
@@ -580,6 +582,85 @@ def verify_search_and_blacklist(sock: socket.socket, now: int, args: argparse.Na
             mysql_query_lines(f"DELETE FROM user WHERE id = {target_id};", args)
 
 
+def verify_busy_state(sock: socket.socket, now: int, args: argparse.Namespace) -> int:
+    password = "codex_pass_123"
+    username = f"busy_user_{now}"
+    user_id = -1
+
+    try:
+        reg_req = {
+            "version": 1,
+            "msgid": 5,
+            "request_id": f"busy-reg-{now}",
+            "name": username,
+            "password": password,
+        }
+        sock.sendall(json.dumps(reg_req).encode("utf-8"))
+        reg_resp = recv_json(sock)
+        print("BUSY_REG", reg_resp)
+        if reg_resp.get("errno") != ERR_OK:
+            return 48
+        user_id = reg_resp["id"]
+
+        login_req = {
+            "version": 1,
+            "msgid": 1,
+            "request_id": f"busy-login-{now}",
+            "id": user_id,
+            "password": password,
+        }
+        sock.sendall(json.dumps(login_req).encode("utf-8"))
+        login_resp = recv_json(sock)
+        print("BUSY_LOGIN", login_resp)
+        if login_resp.get("errno") != ERR_OK:
+            return 49
+
+        set_busy_req = {
+            "version": 1,
+            "msgid": 34,
+            "request_id": f"busy-set-{now}",
+            "id": user_id,
+            "state": "busy",
+        }
+        sock.sendall(json.dumps(set_busy_req).encode("utf-8"))
+        set_busy_resp = recv_json(sock)
+        print("BUSY_SET", set_busy_resp)
+        if set_busy_resp.get("errno") != ERR_OK:
+            return 50
+        if set_busy_resp.get("state") != "busy":
+            return 51
+
+        state_rows = mysql_query_lines(f"SELECT state FROM user WHERE id = {user_id};", args)
+        if not state_rows or state_rows[0] != "busy":
+            return 52
+
+        second_sock = socket.create_connection((args.host, args.port), timeout=args.timeout)
+        try:
+            second_sock.sendall(json.dumps(login_req).encode("utf-8"))
+            second_login_resp = recv_json(second_sock)
+            print("BUSY_SECOND_LOGIN", second_login_resp)
+            if second_login_resp.get("errno") != ERR_AUTH_ALREADY_ONLINE:
+                return 53
+        finally:
+            second_sock.close()
+
+        logout_req = {
+            "version": 1,
+            "msgid": 3,
+            "request_id": f"busy-logout-{now}",
+            "id": user_id,
+        }
+        sock.sendall(json.dumps(logout_req).encode("utf-8"))
+        logout_resp = recv_json(sock)
+        print("BUSY_LOGOUT", logout_resp)
+        if logout_resp.get("errno") != ERR_OK:
+            return 54
+        return 0
+    finally:
+        if user_id > 0:
+            mysql_query_lines(f"DELETE FROM user WHERE id = {user_id};", args)
+
+
 def main() -> int:
     args = parse_args()
     now = int(time.time())
@@ -602,6 +683,8 @@ def main() -> int:
             return verify_history_pagination(sock, now, args)
         if args.search_blacklist_checks:
             return verify_search_and_blacklist(sock, now, args)
+        if args.busy_state_checks:
+            return verify_busy_state(sock, now, args)
 
         reg_req = {
             "version": protocol_version,

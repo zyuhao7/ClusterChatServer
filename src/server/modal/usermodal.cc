@@ -140,7 +140,7 @@ bool UserModal::updatePassword(int id, const string &hashed_password)
 
 void UserModal::resetState()
 {
-      char sql[1024] = "update user set state = 'offline' where state = 'online'"; 
+      char sql[1024] = "update user set state = 'offline' where state in ('online', 'busy')"; 
     
     MySQL mysql;
     if(mysql.connect())

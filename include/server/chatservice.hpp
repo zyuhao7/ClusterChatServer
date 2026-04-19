@@ -63,6 +63,7 @@ public:
   void searchUser(const TcpConnectionPtr &conn, json &js, Timestamp time);
   void addBlacklist(const TcpConnectionPtr &conn, json &js, Timestamp time);
   void removeBlacklist(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  void setUserState(const TcpConnectionPtr &conn, json &js, Timestamp time);
 
 private:
   ChatService();

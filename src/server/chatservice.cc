@@ -39,6 +39,7 @@ ChatService::ChatService()
     _msgHandlerMap.insert({SEARCH_USER_MSG, std::bind(&ChatService::searchUser, this, _1, _2, _3)});
     _msgHandlerMap.insert({ADD_BLACKLIST_MSG, std::bind(&ChatService::addBlacklist, this, _1, _2, _3)});
     _msgHandlerMap.insert({REMOVE_BLACKLIST_MSG, std::bind(&ChatService::removeBlacklist, this, _1, _2, _3)});
+    _msgHandlerMap.insert({SET_USER_STATE_MSG, std::bind(&ChatService::setUserState, this, _1, _2, _3)});
 
     // 连接 redis服务器
     if (_redis.Connect())
@@ -157,7 +158,7 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
         {
             sendAck(conn, LOGIN_MSG_ACK, request_id, ERR_AUTH_BANNED, "用户已被封禁");
         }
-        else if (user.GetState() == "online")
+        else if (user.GetState() == "online" || user.GetState() == "busy")
         {
             sendAck(conn, LOGIN_MSG_ACK, request_id, ERR_AUTH_ALREADY_ONLINE, "该账户已经登陆..");
         }
@@ -890,6 +891,48 @@ void ChatService::removeBlacklist(const TcpConnectionPtr &conn, json &js, Timest
     {
         sendAck(conn, REMOVE_BLACKLIST_MSG_ACK, request_id, ERR_USER_UNBLOCK_FAILED, "移出黑名单失败");
     }
+}
+
+void ChatService::setUserState(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int userid = js["id"].get<int>();
+    string state = js.value("state", "");
+    if (state != "online" && state != "busy")
+    {
+        sendAck(conn, SET_USER_STATE_MSG_ACK, request_id, ERR_USER_STATE_INVALID, "状态非法，仅支持 online 或 busy");
+        return;
+    }
+
+    bool has_connection = false;
+    {
+        lock_guard<mutex> lock(_mtx);
+        auto it = _userConnMap.find(userid);
+        has_connection = (it != _userConnMap.end() && it->second == conn);
+    }
+    if (!has_connection)
+    {
+        sendAck(conn, SET_USER_STATE_MSG_ACK, request_id, ERR_AUTH_INVALID_CREDENTIALS, "当前连接未登录");
+        return;
+    }
+
+    User user = _userModal.query(userid);
+    if (user.GetId() != userid)
+    {
+        sendAck(conn, SET_USER_STATE_MSG_ACK, request_id, ERR_GROUP_USER_NOT_FOUND, "用户不存在");
+        return;
+    }
+
+    user.SetState(state);
+    if (!_userModal.updateState(user))
+    {
+        sendAck(conn, SET_USER_STATE_MSG_ACK, request_id, ERR_USER_STATE_UPDATE_FAILED, "更新用户状态失败");
+        return;
+    }
+
+    json extra;
+    extra["state"] = state;
+    sendAck(conn, SET_USER_STATE_MSG_ACK, request_id, ERR_OK, "", extra);
 }
 
 void ChatService::handleRedisSubscribeMessage(int userid, string msg)

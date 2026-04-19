@@ -94,6 +94,24 @@ def test_list_users_filters_by_state(client: TestClient) -> None:
     assert payload[0]["state"] == "online"
 
 
+def test_list_users_filters_busy_state(client: TestClient) -> None:
+    db = next(iter(app.dependency_overrides[get_db]()))
+    try:
+        user = db.query(User).filter(User.name == "bob").first()
+        assert user is not None
+        user.state = "busy"
+        db.commit()
+    finally:
+        db.close()
+
+    resp = client.get("/api/v1/users", params={"state": "busy"})
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert len(payload) == 1
+    assert payload[0]["name"] == "bob"
+    assert payload[0]["state"] == "busy"
+
+
 def test_ban_user_requires_admin_token(client: TestClient) -> None:
     resp = client.post("/api/v1/admin/users/1/ban")
     assert resp.status_code == 401

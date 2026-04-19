@@ -569,6 +569,15 @@ void readTaskHandler(int clientfd)
             doGenericAck("remove blacklist", js);
             continue;
         }
+        else if (SET_USER_STATE_MSG_ACK == msgtype)
+        {
+            if (js.value("errno", ERR_USER_STATE_INVALID) == ERR_OK && js.contains("state"))
+            {
+                g_CurrentUser.SetState(js["state"].get<string>());
+            }
+            doGenericAck("set status", js);
+            continue;
+        }
     }
 }
 
@@ -632,6 +641,8 @@ void searchuser(int, string);
 void blockuser(int, string);
 // "unblockuser" command handler
 void unblockuser(int, string);
+// "setstatus" command handler
+void setstatus(int, string);
 
 // 系统支持的客户端命令列表
 unordered_map<string, string> commandMap = {
@@ -648,6 +659,7 @@ unordered_map<string, string> commandMap = {
     {"searchuser", "搜索用户,格式searchuser:keyword[:limit[:offset]]"},
     {"blockuser", "加入黑名单,格式blockuser:userid"},
     {"unblockuser", "移出黑名单,格式unblockuser:userid"},
+    {"setstatus", "设置当前状态,格式setstatus:online|busy"},
     {"readmsg", "标记消息已读,格式readmsg:message_id"},
     {"recall", "撤回消息,格式recall:message_id[:toid|groupid]"},
     {"loginout", "注销,格式loginout"}};
@@ -667,6 +679,7 @@ unordered_map<string, function<void(int, string)>> commandHandlerMap = {
     {"searchuser", searchuser},
     {"blockuser", blockuser},
     {"unblockuser", unblockuser},
+    {"setstatus", setstatus},
     {"readmsg", readmsg},
     {"recall", recallmsg},
     {"loginout", loginout}};
@@ -1082,6 +1095,26 @@ void unblockuser(int clientfd, string str)
     if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
     {
         cerr << "send remove blacklist msg error: " << request << endl;
+    }
+}
+
+void setstatus(int clientfd, string str)
+{
+    if (str != "online" && str != "busy")
+    {
+        cerr << "invalid setstatus format, please use: setstatus:online|busy" << endl;
+        return;
+    }
+
+    json js;
+    setProtocolMeta(js, SET_USER_STATE_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["state"] = str;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send set user state msg error: " << request << endl;
     }
 }
 
