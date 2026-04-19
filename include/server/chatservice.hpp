@@ -65,6 +65,9 @@ public:
   void removeBlacklist(const TcpConnectionPtr &conn, json &js, Timestamp time);
   void setUserState(const TcpConnectionPtr &conn, json &js, Timestamp time);
   void setNickname(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  void setGroupAnnouncement(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  void muteGroupMember(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  void kickGroupMember(const TcpConnectionPtr &conn, json &js, Timestamp time);
 
 private:
   ChatService();

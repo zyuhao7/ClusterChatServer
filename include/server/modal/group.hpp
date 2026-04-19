@@ -22,25 +22,29 @@ using namespace std;
 class Group
 {
 public:
-    Group(int id = -1, string name = "", string desc = "")
+    Group(int id = -1, string name = "", string desc = "", string announcement = "")
         : id_(id),
           name_(name),
-          desc_(desc)
+          desc_(desc),
+          announcement_(announcement)
     {
     }
     void SetId(int id) { id_ = id; }
     void SetName(string name) { name_ = name; }
     void SetDesc(string desc) { desc_ = desc; }
+    void SetAnnouncement(string announcement) { announcement_ = announcement; }
 
     int GetId() { return id_; }
     string GetName() { return name_; }
     string GetDesc() { return desc_; }
+    string GetAnnouncement() { return announcement_; }
     vector<GroupUser> &GetUsers() { return users; }
 
 private:
     int id_;
     string name_;
     string desc_;
+    string announcement_;
     vector<GroupUser> users;
 };
 

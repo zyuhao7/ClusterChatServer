@@ -8,8 +8,8 @@ bool GroupModal::CreateGroup(Group& group)
 {
     // 1. 组装 sql
     char sql[1024] = {0};
-    sprintf(sql, "insert into allgroup(groupname, groupdesc) values('%s', '%s')", \
-    group.GetName().c_str(), group.GetDesc().c_str());
+    sprintf(sql, "insert into allgroup(groupname, groupdesc, announcement) values('%s', '%s', '%s')", \
+    group.GetName().c_str(), group.GetDesc().c_str(), group.GetAnnouncement().c_str());
 
     // 2. 执行sql语句
     MySQL mysql;
@@ -28,7 +28,7 @@ bool GroupModal::AddGroup(int userid, int groupid, string role)
 {
     // 1. 组装 sql
     char sql[1024] = {0};
-    sprintf(sql, "insert into groupuser values(%d, %d, '%s')", \
+    sprintf(sql, "insert into groupuser(groupid, userid, grouprole) values(%d, %d, '%s')", \
     groupid, userid, role.c_str());
    
     // 2. 执行sql语句
@@ -47,7 +47,7 @@ bool GroupModal::AddGroup(int userid, int groupid, string role)
  {
     // 1. 组装 sql
     char sql[1024] = {0};
-    sprintf(sql, "select a.id, a.groupname, a.groupdesc from allgroup a \
+    sprintf(sql, "select a.id, a.groupname, a.groupdesc, a.announcement from allgroup a \
     inner join groupuser b on a.id = b.groupid where b.userid = %d", userid);
     vector<Group> groupVec; 
     // 2. 执行sql语句
@@ -64,6 +64,7 @@ bool GroupModal::AddGroup(int userid, int groupid, string role)
                 group.SetId(atoi(row[0]));
                 group.SetName(row[1]);
                 group.SetDesc(row[2]);
+                group.SetAnnouncement(row[3] ? row[3] : "");
                 groupVec.push_back(group);
             }
             mysql_free_result(res);
@@ -72,7 +73,7 @@ bool GroupModal::AddGroup(int userid, int groupid, string role)
     // 3. 从群组信息中提取用户id
     for(auto& group : groupVec)
     {
-        sprintf(sql,"select a.id, a.name, a.state, b.grouprole from user a\
+        sprintf(sql,"select a.id, a.name, a.state, b.grouprole, ifnull(date_format(b.muted_until, '%%Y-%%m-%%d %%H:%%i:%%s'), '') from user a\
             inner join groupuser b on b.userid = a.id where b.groupid = %d", group.GetId());
         MYSQL_RES* res = mysql.query(sql);
         if(res)
@@ -84,6 +85,7 @@ bool GroupModal::AddGroup(int userid, int groupid, string role)
                 user.SetName(row[1]);
                 user.SetState(row[2]);
                 user.SetRole(row[3]);
+                user.SetMutedUntil(row[4] ? row[4] : "");
                 group.GetUsers().push_back(user);
             }
             mysql_free_result(res);
@@ -184,4 +186,63 @@ bool GroupModal::UpdateUserRole(int userid, int groupid, const string &role)
         return false;
     }
     return mysql.update(sql);
+}
+
+bool GroupModal::UpdateAnnouncement(int groupid, const string &announcement)
+{
+    char sql[1024] = {0};
+    sprintf(sql,
+            "update allgroup set announcement = '%s' where id = %d",
+            announcement.c_str(), groupid);
+    MySQL mysql;
+    if (!mysql.connect())
+    {
+        return false;
+    }
+    return mysql.update(sql);
+}
+
+bool GroupModal::UpdateMutedUntil(int userid, int groupid, const string &muted_until)
+{
+    char sql[1024] = {0};
+    if (muted_until.empty())
+    {
+        sprintf(sql,
+                "update groupuser set muted_until = null where groupid = %d and userid = %d",
+                groupid, userid);
+    }
+    else
+    {
+        sprintf(sql,
+                "update groupuser set muted_until = '%s' where groupid = %d and userid = %d",
+                muted_until.c_str(), groupid, userid);
+    }
+    MySQL mysql;
+    if (!mysql.connect())
+    {
+        return false;
+    }
+    return mysql.update(sql);
+}
+
+bool GroupModal::IsUserMuted(int userid, int groupid)
+{
+    char sql[256] = {0};
+    sprintf(sql,
+            "select 1 from groupuser where groupid = %d and userid = %d and muted_until is not null and muted_until > now() limit 1",
+            groupid, userid);
+    MySQL mysql;
+    if (!mysql.connect())
+    {
+        return false;
+    }
+    MYSQL_RES *res = mysql.query(sql);
+    if (res == nullptr)
+    {
+        return false;
+    }
+    MYSQL_ROW row = mysql_fetch_row(res);
+    bool muted = (row != nullptr);
+    mysql_free_result(res);
+    return muted;
 }

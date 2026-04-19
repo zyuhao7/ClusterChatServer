@@ -26,6 +26,12 @@ class GroupModal
     bool RemoveGroupUser(int userid, int groupid);
     // 更新群成员角色
     bool UpdateUserRole(int userid, int groupid, const string &role);
+    // 更新群公告
+    bool UpdateAnnouncement(int groupid, const string &announcement);
+    // 更新禁言截止时间，空串表示解除禁言
+    bool UpdateMutedUntil(int userid, int groupid, const string &muted_until);
+    // 判断当前用户是否处于禁言中
+    bool IsUserMuted(int userid, int groupid);
 
 };
 

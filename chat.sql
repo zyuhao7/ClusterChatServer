@@ -30,13 +30,15 @@ CREATE TABLE IF NOT EXISTS user_blacklist (
 CREATE TABLE IF NOT EXISTS allgroup (
     id INT PRIMARY KEY AUTO_INCREMENT,
     groupname VARCHAR(50) NOT NULL,
-    groupdesc VARCHAR(255) DEFAULT ''
+    groupdesc VARCHAR(255) DEFAULT '',
+    announcement VARCHAR(255) NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS groupuser (
     groupid INT NOT NULL,
     userid INT NOT NULL,
     grouprole VARCHAR(20) NOT NULL DEFAULT 'normal',
+    muted_until DATETIME NULL,
     PRIMARY KEY (groupid, userid),
     CONSTRAINT fk_groupuser_group FOREIGN KEY (groupid) REFERENCES allgroup(id) ON DELETE CASCADE,
     CONSTRAINT fk_groupuser_user FOREIGN KEY (userid) REFERENCES user(id) ON DELETE CASCADE,

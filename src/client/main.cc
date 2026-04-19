@@ -255,6 +255,10 @@ void doLoginResponse(json &response)
                 group.SetId(js["id"].get<int>());
                 group.SetName(js["groupname"]);
                 group.SetDesc(js["groupdesc"]);
+                if (js.contains("announcement"))
+                {
+                    group.SetAnnouncement(js["announcement"]);
+                }
 
                 vector<string> vec2 = js["users"];
                 for (string &user : vec2)
@@ -265,6 +269,10 @@ void doLoginResponse(json &response)
                     g_user.SetName(js["name"]);
                     g_user.SetState(js["state"]);
                     g_user.SetRole(js["role"]);
+                    if (js.contains("muted_until"))
+                    {
+                        g_user.SetMutedUntil(js["muted_until"]);
+                    }
                     group.GetUsers().push_back(g_user);
                 }
                 g_CurrentUserGroupsList.push_back(group);
@@ -587,6 +595,21 @@ void readTaskHandler(int clientfd)
             doGenericAck("set name", js);
             continue;
         }
+        else if (SET_GROUP_ANNOUNCEMENT_MSG_ACK == msgtype)
+        {
+            doGenericAck("set group announcement", js);
+            continue;
+        }
+        else if (MUTE_GROUP_MEMBER_MSG_ACK == msgtype)
+        {
+            doGenericAck("mute group member", js);
+            continue;
+        }
+        else if (KICK_GROUP_MEMBER_MSG_ACK == msgtype)
+        {
+            doGenericAck("kick group member", js);
+            continue;
+        }
     }
 }
 
@@ -608,11 +631,21 @@ void showCurrentUserInfo()
     {
         for (Group &group : g_CurrentUserGroupsList)
         {
-            cout << group.GetId() << " " << group.GetName() << " " << group.GetDesc() << endl;
+            cout << group.GetId() << " " << group.GetName() << " " << group.GetDesc();
+            if (!group.GetAnnouncement().empty())
+            {
+                cout << " announcement=" << group.GetAnnouncement();
+            }
+            cout << endl;
             for (GroupUser &user : group.GetUsers())
             {
                 cout << user.GetId() << " " << user.GetName() << " " << user.GetState()
-                     << " " << user.GetRole() << endl;
+                     << " " << user.GetRole();
+                if (!user.GetMutedUntil().empty())
+                {
+                    cout << " muted_until=" << user.GetMutedUntil();
+                }
+                cout << endl;
             }
         }
     }
@@ -654,6 +687,12 @@ void unblockuser(int, string);
 void setstatus(int, string);
 // "setname" command handler
 void setname(int, string);
+// "groupnotice" command handler
+void groupnotice(int, string);
+// "muteuser" command handler
+void muteuser(int, string);
+// "kickuser" command handler
+void kickuser(int, string);
 
 // 系统支持的客户端命令列表
 unordered_map<string, string> commandMap = {
@@ -672,6 +711,9 @@ unordered_map<string, string> commandMap = {
     {"unblockuser", "移出黑名单,格式unblockuser:userid"},
     {"setstatus", "设置当前状态,格式setstatus:online|busy"},
     {"setname", "修改昵称,格式setname:new_name"},
+    {"groupnotice", "设置群公告,格式groupnotice:groupid:announcement"},
+    {"muteuser", "禁言群成员,格式muteuser:groupid:userid:minutes"},
+    {"kickuser", "踢出群成员,格式kickuser:groupid:userid"},
     {"readmsg", "标记消息已读,格式readmsg:message_id"},
     {"recall", "撤回消息,格式recall:message_id[:toid|groupid]"},
     {"loginout", "注销,格式loginout"}};
@@ -693,6 +735,9 @@ unordered_map<string, function<void(int, string)>> commandHandlerMap = {
     {"unblockuser", unblockuser},
     {"setstatus", setstatus},
     {"setname", setname},
+    {"groupnotice", groupnotice},
+    {"muteuser", muteuser},
+    {"kickuser", kickuser},
     {"readmsg", readmsg},
     {"recall", recallmsg},
     {"loginout", loginout}};
@@ -1148,6 +1193,81 @@ void setname(int clientfd, string str)
     if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
     {
         cerr << "send set nickname msg error: " << request << endl;
+    }
+}
+
+void groupnotice(int clientfd, string str)
+{
+    int idx = str.find(":");
+    if (idx == -1)
+    {
+        cerr << "invalid groupnotice format, please use: groupnotice:groupid:announcement" << endl;
+        return;
+    }
+
+    int groupid = atoi(str.substr(0, idx).c_str());
+    string announcement = str.substr(idx + 1);
+    json js;
+    setProtocolMeta(js, SET_GROUP_ANNOUNCEMENT_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["groupid"] = groupid;
+    js["announcement"] = announcement;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send set group announcement msg error: " << request << endl;
+    }
+}
+
+void muteuser(int clientfd, string str)
+{
+    int first = str.find(":");
+    int second = str.find(":", first + 1);
+    if (first == -1 || second == -1)
+    {
+        cerr << "invalid muteuser format, please use: muteuser:groupid:userid:minutes" << endl;
+        return;
+    }
+
+    int groupid = atoi(str.substr(0, first).c_str());
+    int targetid = atoi(str.substr(first + 1, second - first - 1).c_str());
+    int minutes = atoi(str.substr(second + 1).c_str());
+    json js;
+    setProtocolMeta(js, MUTE_GROUP_MEMBER_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["groupid"] = groupid;
+    js["targetid"] = targetid;
+    js["minutes"] = minutes;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send mute group member msg error: " << request << endl;
+    }
+}
+
+void kickuser(int clientfd, string str)
+{
+    int idx = str.find(":");
+    if (idx == -1)
+    {
+        cerr << "invalid kickuser format, please use: kickuser:groupid:userid" << endl;
+        return;
+    }
+
+    int groupid = atoi(str.substr(0, idx).c_str());
+    int targetid = atoi(str.substr(idx + 1).c_str());
+    json js;
+    setProtocolMeta(js, KICK_GROUP_MEMBER_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["groupid"] = groupid;
+    js["targetid"] = targetid;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send kick group member msg error: " << request << endl;
     }
 }
 

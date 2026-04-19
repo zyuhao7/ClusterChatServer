@@ -17,8 +17,11 @@ class GroupUser : public User
 public:
    void SetRole(string role) { this->role = role; }
    string GetRole() { return role; }
+   void SetMutedUntil(string muted_until) { this->muted_until = muted_until; }
+   string GetMutedUntil() { return muted_until; }
 
 private:
    string role;
+   string muted_until;
 };
 #endif

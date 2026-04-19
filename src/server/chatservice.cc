@@ -3,6 +3,7 @@
 #include "appconfig.hpp"
 #include "password.hpp"
 #include <muduo/base/Logging.h>
+#include <ctime>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -41,6 +42,9 @@ ChatService::ChatService()
     _msgHandlerMap.insert({REMOVE_BLACKLIST_MSG, std::bind(&ChatService::removeBlacklist, this, _1, _2, _3)});
     _msgHandlerMap.insert({SET_USER_STATE_MSG, std::bind(&ChatService::setUserState, this, _1, _2, _3)});
     _msgHandlerMap.insert({SET_NICKNAME_MSG, std::bind(&ChatService::setNickname, this, _1, _2, _3)});
+    _msgHandlerMap.insert({SET_GROUP_ANNOUNCEMENT_MSG, std::bind(&ChatService::setGroupAnnouncement, this, _1, _2, _3)});
+    _msgHandlerMap.insert({MUTE_GROUP_MEMBER_MSG, std::bind(&ChatService::muteGroupMember, this, _1, _2, _3)});
+    _msgHandlerMap.insert({KICK_GROUP_MEMBER_MSG, std::bind(&ChatService::kickGroupMember, this, _1, _2, _3)});
 
     // 连接 redis服务器
     if (_redis.Connect())
@@ -231,6 +235,7 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                     grpjson["id"] = group.GetId();
                     grpjson["groupname"] = group.GetName();
                     grpjson["groupdesc"] = group.GetDesc();
+                    grpjson["announcement"] = group.GetAnnouncement();
                     vector<string> userV;
                     for (GroupUser &user : group.GetUsers())
                     {
@@ -239,6 +244,7 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                         js["name"] = user.GetName();
                         js["state"] = user.GetState();
                         js["role"] = user.GetRole();
+                        js["muted_until"] = user.GetMutedUntil();
                         userV.push_back(js.dump());
                     }
                     grpjson["users"] = userV;
@@ -616,6 +622,11 @@ void ChatService::groupChat(const TcpConnectionPtr &conn, json &js, Timestamp ti
         sendAck(conn, GROUP_CHAT_MSG_ACK, request_id, ERR_GROUP_NOT_MEMBER, "用户不在群组中");
         return;
     }
+    if (_groupModal.IsUserMuted(userid, groupid))
+    {
+        sendAck(conn, GROUP_CHAT_MSG_ACK, request_id, ERR_GROUP_MEMBER_MUTED, "当前用户已被禁言");
+        return;
+    }
 
     long long message_id = _messageHistoryModal.insertGroup(request_id, userid, groupid, js["msg"].get<string>());
     if (message_id < 0)
@@ -980,6 +991,130 @@ void ChatService::setNickname(const TcpConnectionPtr &conn, json &js, Timestamp 
     json extra;
     extra["name"] = name;
     sendAck(conn, SET_NICKNAME_MSG_ACK, request_id, ERR_OK, "", extra);
+}
+
+void ChatService::setGroupAnnouncement(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int operator_id = js["id"].get<int>();
+    int groupid = js["groupid"].get<int>();
+    string announcement = js.value("announcement", "");
+    if (announcement.empty())
+    {
+        sendAck(conn, SET_GROUP_ANNOUNCEMENT_MSG_ACK, request_id, ERR_GROUP_ANNOUNCEMENT_EMPTY, "群公告不能为空");
+        return;
+    }
+
+    string operator_role = _groupModal.QueryUserRole(operator_id, groupid);
+    if (operator_role != "creator" && operator_role != "admin")
+    {
+        sendAck(conn, SET_GROUP_ANNOUNCEMENT_MSG_ACK, request_id, ERR_GROUP_ROLE_PERMISSION_DENIED, "仅群主或管理员可设置群公告");
+        return;
+    }
+    if (!_groupModal.UpdateAnnouncement(groupid, announcement))
+    {
+        sendAck(conn, SET_GROUP_ANNOUNCEMENT_MSG_ACK, request_id, ERR_GROUP_ANNOUNCEMENT_UPDATE_FAILED, "更新群公告失败");
+        return;
+    }
+
+    json extra;
+    extra["groupid"] = groupid;
+    extra["announcement"] = announcement;
+    sendAck(conn, SET_GROUP_ANNOUNCEMENT_MSG_ACK, request_id, ERR_OK, "", extra);
+}
+
+void ChatService::muteGroupMember(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int operator_id = js["id"].get<int>();
+    int groupid = js["groupid"].get<int>();
+    int target_id = js["targetid"].get<int>();
+    int minutes = js.value("minutes", 0);
+    string operator_role = _groupModal.QueryUserRole(operator_id, groupid);
+    string target_role = _groupModal.QueryUserRole(target_id, groupid);
+
+    if (minutes <= 0)
+    {
+        sendAck(conn, MUTE_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_ROLE_INVALID, "禁言时长必须大于 0");
+        return;
+    }
+    if (operator_role != "creator" && operator_role != "admin")
+    {
+        sendAck(conn, MUTE_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_MUTE_PERMISSION_DENIED, "仅群主或管理员可禁言成员");
+        return;
+    }
+    if (target_role.empty())
+    {
+        sendAck(conn, MUTE_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_TARGET_NOT_MEMBER, "目标用户不在群组中");
+        return;
+    }
+    if (target_role == "creator")
+    {
+        sendAck(conn, MUTE_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_CANNOT_CHANGE_CREATOR_ROLE, "不能禁言群主");
+        return;
+    }
+    if (operator_role == "admin" && target_role == "admin")
+    {
+        sendAck(conn, MUTE_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_MUTE_PERMISSION_DENIED, "管理员不能禁言其他管理员");
+        return;
+    }
+
+    time_t muted_ts = ::time(nullptr) + minutes * 60;
+    tm *ptm = localtime(&muted_ts);
+    char muted_until[32] = {0};
+    strftime(muted_until, sizeof(muted_until), "%Y-%m-%d %H:%M:%S", ptm);
+    if (!_groupModal.UpdateMutedUntil(target_id, groupid, muted_until))
+    {
+        sendAck(conn, MUTE_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_MUTE_UPDATE_FAILED, "更新禁言状态失败");
+        return;
+    }
+
+    json extra;
+    extra["groupid"] = groupid;
+    extra["targetid"] = target_id;
+    extra["muted_until"] = muted_until;
+    sendAck(conn, MUTE_GROUP_MEMBER_MSG_ACK, request_id, ERR_OK, "", extra);
+}
+
+void ChatService::kickGroupMember(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int operator_id = js["id"].get<int>();
+    int groupid = js["groupid"].get<int>();
+    int target_id = js["targetid"].get<int>();
+    string operator_role = _groupModal.QueryUserRole(operator_id, groupid);
+    string target_role = _groupModal.QueryUserRole(target_id, groupid);
+
+    if (operator_role != "creator" && operator_role != "admin")
+    {
+        sendAck(conn, KICK_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_KICK_PERMISSION_DENIED, "仅群主或管理员可踢人");
+        return;
+    }
+    if (target_role.empty())
+    {
+        sendAck(conn, KICK_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_TARGET_NOT_MEMBER, "目标用户不在群组中");
+        return;
+    }
+    if (target_role == "creator")
+    {
+        sendAck(conn, KICK_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_CANNOT_CHANGE_CREATOR_ROLE, "不能踢出群主");
+        return;
+    }
+    if (operator_role == "admin" && target_role == "admin")
+    {
+        sendAck(conn, KICK_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_KICK_PERMISSION_DENIED, "管理员不能踢出其他管理员");
+        return;
+    }
+    if (!_groupModal.RemoveGroupUser(target_id, groupid))
+    {
+        sendAck(conn, KICK_GROUP_MEMBER_MSG_ACK, request_id, ERR_GROUP_KICK_FAILED, "踢人失败");
+        return;
+    }
+
+    json extra;
+    extra["groupid"] = groupid;
+    extra["targetid"] = target_id;
+    sendAck(conn, KICK_GROUP_MEMBER_MSG_ACK, request_id, ERR_OK, "", extra);
 }
 
 void ChatService::handleRedisSubscribeMessage(int userid, string msg)

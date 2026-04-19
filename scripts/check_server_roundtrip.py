@@ -14,6 +14,7 @@ ERR_AUTH_BANNED = 4103
 ERR_GROUP_USER_NOT_FOUND = 4401
 ERR_GROUP_CANNOT_CHANGE_CREATOR_ROLE = 4413
 ERR_GROUP_ADMIN_CANNOT_GRANT_ADMIN = 4418
+ERR_GROUP_MEMBER_MUTED = 4422
 ERR_USER_BLOCKED_RELATION = 4608
 
 
@@ -424,6 +425,72 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
         )
         if not admin_role_rows or admin_role_rows[0] != "admin":
             return 36
+
+        announcement_req = {
+            "version": protocol_version,
+            "msgid": 38,
+            "request_id": f"group-announcement-{now}",
+            "id": creator_id,
+            "groupid": group_id,
+            "announcement": "maintenance at 22:00",
+        }
+        sock.sendall(json.dumps(announcement_req).encode("utf-8"))
+        announcement_resp = recv_json(sock)
+        print("GROUP_ANNOUNCEMENT", announcement_resp)
+        if announcement_resp.get("errno") != ERR_OK:
+            return 37
+
+        mute_req = {
+            "version": protocol_version,
+            "msgid": 40,
+            "request_id": f"group-mute-{now}",
+            "id": creator_id,
+            "groupid": group_id,
+            "targetid": extra_id,
+            "minutes": 10,
+        }
+        sock.sendall(json.dumps(mute_req).encode("utf-8"))
+        mute_resp = recv_json(sock)
+        print("GROUP_MUTE", mute_resp)
+        if mute_resp.get("errno") != ERR_OK:
+            return 38
+
+        muted_chat_req = {
+            "version": protocol_version,
+            "msgid": 15,
+            "request_id": f"group-muted-chat-{now}",
+            "id": extra_id,
+            "name": extra_name,
+            "groupid": group_id,
+            "msg": "should be blocked",
+            "time": "2026-04-19 00:00:00",
+        }
+        sock.sendall(json.dumps(muted_chat_req).encode("utf-8"))
+        muted_chat_resp = recv_json(sock)
+        print("GROUP_MUTED_CHAT", muted_chat_resp)
+        if muted_chat_resp.get("errno") != ERR_GROUP_MEMBER_MUTED:
+            return 39
+
+        kick_req = {
+            "version": protocol_version,
+            "msgid": 42,
+            "request_id": f"group-kick-{now}",
+            "id": creator_id,
+            "groupid": group_id,
+            "targetid": extra_id,
+        }
+        sock.sendall(json.dumps(kick_req).encode("utf-8"))
+        kick_resp = recv_json(sock)
+        print("GROUP_KICK", kick_resp)
+        if kick_resp.get("errno") != ERR_OK:
+            return 40
+
+        kicked_rows = mysql_query_lines(
+            f"SELECT COUNT(*) FROM groupuser WHERE groupid = {group_id} AND userid = {extra_id};",
+            args,
+        )
+        if not kicked_rows or kicked_rows[0] != "0":
+            return 41
         return 0
     finally:
         if creator_id > 0 and member_id > 0 and extra_id > 0:
