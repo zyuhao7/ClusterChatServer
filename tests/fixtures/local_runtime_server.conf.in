@@ -1,0 +1,17 @@
+# Local test runtime template.
+server.host = {{SERVER_HOST}}
+server.port = {{SERVER_PORT}}
+server.thread_num = 2
+server.log_level = INFO
+
+db.host = {{MYSQL_HOST}}
+db.port = {{MYSQL_PORT}}
+db.user = root
+db.password = 123456
+db.name = chat
+db.charset = utf8mb4
+
+redis.host = {{REDIS_HOST}}
+redis.port = {{REDIS_PORT}}
+
+security.bcrypt_cost = 10
