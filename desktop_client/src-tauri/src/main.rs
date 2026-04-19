@@ -1,11 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
 use std::time::Duration;
+use tauri::Emitter;
 
 const CHAT_PROTOCOL_VERSION: i64 = 1;
 const LOGIN_MSG: i64 = 1;
@@ -14,12 +17,18 @@ const QUERY_HISTORY_MSG: i64 = 26;
 const SEARCH_USER_MSG: i64 = 28;
 const SET_USER_STATE_MSG: i64 = 34;
 const SET_NICKNAME_MSG: i64 = 36;
+const ONE_CHAT_MSG: i64 = 7;
+const GROUP_CHAT_MSG: i64 = 15;
+const RECALL_NOTIFY_MSG: i64 = 25;
+
+type PendingMap = Arc<Mutex<HashMap<String, mpsc::Sender<Value>>>>;
 
 struct Session {
-    stream: TcpStream,
+    writer: Arc<Mutex<TcpStream>>,
     host: String,
     port: u16,
     user_id: i64,
+    pending: PendingMap,
 }
 
 struct AppState {
@@ -32,18 +41,13 @@ fn next_request_id(state: &AppState, prefix: &str) -> String {
     format!("{prefix}-{value}")
 }
 
-fn send_and_receive(stream: &mut TcpStream, payload: &Value) -> Result<Value, String> {
-    let mut request = payload.to_string().into_bytes();
-    request.push(0);
-    stream.write_all(&request).map_err(|err| err.to_string())?;
-    stream.flush().map_err(|err| err.to_string())?;
-
+fn recv_message(stream: &mut TcpStream) -> Result<Value, String> {
     let mut response = Vec::new();
     let mut buf = [0_u8; 4096];
     loop {
         let read = stream.read(&mut buf).map_err(|err| err.to_string())?;
         if read == 0 {
-            break;
+            return Err("socket closed".to_string());
         }
         response.extend_from_slice(&buf[..read]);
         if response.contains(&0) {
@@ -58,10 +62,18 @@ fn send_and_receive(stream: &mut TcpStream, payload: &Value) -> Result<Value, St
     serde_json::from_str(&text).map_err(|err| err.to_string())
 }
 
+fn write_message(writer: &Arc<Mutex<TcpStream>>, payload: &Value) -> Result<(), String> {
+    let mut stream = writer.lock().map_err(|err| err.to_string())?;
+    let mut request = payload.to_string().into_bytes();
+    request.push(0);
+    stream.write_all(&request).map_err(|err| err.to_string())?;
+    stream.flush().map_err(|err| err.to_string())
+}
+
 fn connect_stream(host: &str, port: u16) -> Result<TcpStream, String> {
     let stream = TcpStream::connect((host, port)).map_err(|err| err.to_string())?;
     stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_read_timeout(Some(Duration::from_secs(30)))
         .map_err(|err| err.to_string())?;
     stream
         .set_write_timeout(Some(Duration::from_secs(5)))
@@ -69,25 +81,109 @@ fn connect_stream(host: &str, port: u16) -> Result<TcpStream, String> {
     Ok(stream)
 }
 
+fn spawn_listener(app: tauri::AppHandle, mut reader: TcpStream, pending: PendingMap) {
+    thread::spawn(move || loop {
+        let payload = match recv_message(&mut reader) {
+            Ok(payload) => payload,
+            Err(_) => break,
+        };
+
+        let request_id = payload
+            .get("request_id")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .unwrap_or_default();
+
+        let delivered = if !request_id.is_empty() {
+            let sender = pending
+                .lock()
+                .ok()
+                .and_then(|mut entries| entries.remove(&request_id));
+            if let Some(sender) = sender {
+                sender.send(payload.clone()).is_ok()
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if delivered {
+            continue;
+        }
+
+        let msgid = payload.get("msgid").and_then(Value::as_i64).unwrap_or_default();
+        if msgid == ONE_CHAT_MSG || msgid == GROUP_CHAT_MSG || msgid == RECALL_NOTIFY_MSG {
+            let _ = app.emit("protocol-event", payload);
+        }
+    });
+}
+
+fn send_request(session: &Session, payload: Value) -> Result<Value, String> {
+    let request_id = payload
+        .get("request_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "request_id missing".to_string())?
+        .to_string();
+    let (sender, receiver) = mpsc::channel();
+    session
+        .pending
+        .lock()
+        .map_err(|err| err.to_string())?
+        .insert(request_id.clone(), sender);
+
+    if let Err(error) = write_message(&session.writer, &payload) {
+        session
+            .pending
+            .lock()
+            .map_err(|err| err.to_string())?
+            .remove(&request_id);
+        return Err(error);
+    }
+
+    receiver
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|err| err.to_string())
+}
+
 #[tauri::command]
-fn login(state: tauri::State<AppState>, host: String, port: u16, user_id: i64, password: String) -> Result<Value, String> {
-    let mut stream = connect_stream(&host, port)?;
+fn login(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+    host: String,
+    port: u16,
+    user_id: i64,
+    password: String,
+) -> Result<Value, String> {
+    let writer = connect_stream(&host, port)?;
+    let reader = writer.try_clone().map_err(|err| err.to_string())?;
+    let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
+    spawn_listener(app, reader, pending.clone());
+
+    let writer = Arc::new(Mutex::new(writer));
+    let request_id = next_request_id(&state, "desktop-login");
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": LOGIN_MSG,
-        "request_id": next_request_id(&state, "desktop-login"),
+        "request_id": request_id,
         "id": user_id,
         "password": password,
     });
-    let response = send_and_receive(&mut stream, &payload)?;
+
+    let temp_session = Session {
+        writer: writer.clone(),
+        host: host.clone(),
+        port,
+        user_id,
+        pending: pending.clone(),
+    };
+    let response = send_request(&temp_session, payload)?;
     if response.get("errno").and_then(Value::as_i64) == Some(0) {
         let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-        *guard = Some(Session {
-            stream,
-            host,
-            port,
-            user_id,
-        });
+        *guard = Some(temp_session);
+    } else {
+        let stream = writer.lock().map_err(|err| err.to_string())?;
+        let _ = stream.shutdown(Shutdown::Both);
     }
     Ok(response)
 }
@@ -95,22 +191,25 @@ fn login(state: tauri::State<AppState>, host: String, port: u16, user_id: i64, p
 #[tauri::command]
 fn logout(state: tauri::State<AppState>) -> Result<Value, String> {
     let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_mut().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": LOGINOUT_MSG,
         "request_id": next_request_id(&state, "desktop-logout"),
         "id": session.user_id,
     });
-    let response = send_and_receive(&mut session.stream, &payload)?;
+    let response = send_request(session, payload)?;
+    if let Ok(stream) = session.writer.lock() {
+        let _ = stream.shutdown(Shutdown::Both);
+    }
     *guard = None;
     Ok(response)
 }
 
 #[tauri::command]
 fn set_presence(state: tauri::State<AppState>, state_name: String) -> Result<Value, String> {
-    let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_mut().ok_or_else(|| "No active session".to_string())?;
+    let guard = state.session.lock().map_err(|err| err.to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": SET_USER_STATE_MSG,
@@ -118,13 +217,13 @@ fn set_presence(state: tauri::State<AppState>, state_name: String) -> Result<Val
         "id": session.user_id,
         "state": state_name,
     });
-    send_and_receive(&mut session.stream, &payload)
+    send_request(session, payload)
 }
 
 #[tauri::command]
 fn set_nickname(state: tauri::State<AppState>, name: String) -> Result<Value, String> {
-    let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_mut().ok_or_else(|| "No active session".to_string())?;
+    let guard = state.session.lock().map_err(|err| err.to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": SET_NICKNAME_MSG,
@@ -132,13 +231,13 @@ fn set_nickname(state: tauri::State<AppState>, name: String) -> Result<Value, St
         "id": session.user_id,
         "name": name,
     });
-    send_and_receive(&mut session.stream, &payload)
+    send_request(session, payload)
 }
 
 #[tauri::command]
 fn search_users(state: tauri::State<AppState>, keyword: String, limit: i64, offset: i64) -> Result<Value, String> {
-    let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_mut().ok_or_else(|| "No active session".to_string())?;
+    let guard = state.session.lock().map_err(|err| err.to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": SEARCH_USER_MSG,
@@ -148,7 +247,7 @@ fn search_users(state: tauri::State<AppState>, keyword: String, limit: i64, offs
         "limit": limit,
         "offset": offset,
     });
-    send_and_receive(&mut session.stream, &payload)
+    send_request(session, payload)
 }
 
 #[tauri::command]
@@ -159,8 +258,8 @@ fn query_direct_history(
     offset: i64,
     order: String,
 ) -> Result<Value, String> {
-    let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_mut().ok_or_else(|| "No active session".to_string())?;
+    let guard = state.session.lock().map_err(|err| err.to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": QUERY_HISTORY_MSG,
@@ -171,7 +270,7 @@ fn query_direct_history(
         "offset": offset,
         "order": order,
     });
-    send_and_receive(&mut session.stream, &payload)
+    send_request(session, payload)
 }
 
 #[tauri::command]
@@ -182,8 +281,8 @@ fn query_group_history(
     offset: i64,
     order: String,
 ) -> Result<Value, String> {
-    let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_mut().ok_or_else(|| "No active session".to_string())?;
+    let guard = state.session.lock().map_err(|err| err.to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": QUERY_HISTORY_MSG,
@@ -194,7 +293,7 @@ fn query_group_history(
         "offset": offset,
         "order": order,
     });
-    send_and_receive(&mut session.stream, &payload)
+    send_request(session, payload)
 }
 
 #[tauri::command]

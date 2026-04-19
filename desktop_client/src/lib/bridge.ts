@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 
-import type { HistoryEntry, SearchUserEntry } from "./protocol"
+import type { HistoryEntry, LoginResponsePayload, ProtocolPushEvent, SearchUserEntry } from "./protocol"
 
 interface BridgeResponse {
     version: number
@@ -11,11 +12,6 @@ interface BridgeResponse {
     [key: string]: unknown
 }
 
-export interface LoginBridgeResponse extends BridgeResponse {
-    id: number
-    name: string
-}
-
 function assertOk<T extends BridgeResponse>(payload: T) {
     if (payload.errno !== 0) {
         throw new Error(payload.errmsg || `Protocol error ${payload.errno}`)
@@ -24,7 +20,7 @@ function assertOk<T extends BridgeResponse>(payload: T) {
 }
 
 export async function login(host: string, port: number, userId: number, password: string) {
-    const payload = await invoke<LoginBridgeResponse>("login", { host, port, userId, password })
+    const payload = await invoke<LoginResponsePayload & BridgeResponse>("login", { host, port, userId, password })
     return assertOk(payload)
 }
 
@@ -47,7 +43,7 @@ export async function searchUsers(keyword: string, limit = 20, offset = 0) {
     const payload = await invoke<BridgeResponse>("search_users", { keyword, limit, offset })
     const response = assertOk(payload)
     const users = Array.isArray(response.users)
-        ? response.users.map((item) => JSON.parse(String(item))) as SearchUserEntry[]
+        ? response.users.map((item) => JSON.parse(String(item)) as SearchUserEntry)
         : []
     return { response, users }
 }
@@ -56,7 +52,7 @@ export async function queryDirectHistory(targetId: number, limit = 20, offset = 
     const payload = await invoke<BridgeResponse>("query_direct_history", { targetId, limit, offset, order })
     const response = assertOk(payload)
     const history = Array.isArray(response.history)
-        ? response.history.map((item) => JSON.parse(String(item))) as HistoryEntry[]
+        ? response.history.map((item) => JSON.parse(String(item)) as HistoryEntry)
         : []
     return { response, history }
 }
@@ -65,7 +61,15 @@ export async function queryGroupHistory(groupId: number, limit = 20, offset = 0,
     const payload = await invoke<BridgeResponse>("query_group_history", { groupId, limit, offset, order })
     const response = assertOk(payload)
     const history = Array.isArray(response.history)
-        ? response.history.map((item) => JSON.parse(String(item))) as HistoryEntry[]
+        ? response.history.map((item) => JSON.parse(String(item)) as HistoryEntry)
         : []
     return { response, history }
+}
+
+export async function sessionInfo() {
+    return invoke<Record<string, unknown>>("session_info")
+}
+
+export async function subscribeProtocolEvents(handler: (event: ProtocolPushEvent) => void) {
+    return listen<ProtocolPushEvent>("protocol-event", (event) => handler(event.payload))
 }
