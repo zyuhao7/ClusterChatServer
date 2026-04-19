@@ -48,6 +48,13 @@ string nextRequestId()
     return oss.str();
 }
 
+void setProtocolMeta(json &js, int msgid)
+{
+    js["version"] = CHAT_PROTOCOL_VERSION;
+    js["msgid"] = msgid;
+    js["request_id"] = nextRequestId();
+}
+
 // 接收线程
 void readTaskHandler(int clientfd);
 // 获取系统时间（聊天信息需要添加时间信息）
@@ -128,8 +135,7 @@ int main(int argc, char **argv)
             cin.getline(pwd, 50);
 
             json js;
-            js["msgid"] = LOGIN_MSG;
-            js["request_id"] = nextRequestId();
+            setProtocolMeta(js, LOGIN_MSG);
             js["id"] = id;
             js["password"] = pwd;
             string request = js.dump(); // 将json对象序列化为字符串
@@ -162,8 +168,7 @@ int main(int argc, char **argv)
             cin.getline(pwd, 50);
 
             json js;
-            js["msgid"] = REG_MSG;
-            js["request_id"] = nextRequestId();
+            setProtocolMeta(js, REG_MSG);
             js["name"] = name;
             js["password"] = pwd;
             string request = js.dump();
@@ -322,19 +327,96 @@ void doGenericAck(const string &title, json &response)
         {
             cout << ", groupid: " << response["groupid"].get<int>();
         }
-        if (response.contains("message_id"))
-        {
-            cout << ", message_id: " << response["message_id"].get<long long>();
-        }
-        if (response.contains("deliver_count"))
-        {
-            cout << ", deliver_count: " << response["deliver_count"].get<int>();
-        }
+    if (response.contains("message_id"))
+    {
+        cout << ", message_id: " << response["message_id"].get<long long>();
+    }
+    if (response.value("duplicate", false))
+    {
+        cout << ", duplicate: true";
+    }
+    if (response.contains("deliver_count"))
+    {
+        cout << ", deliver_count: " << response["deliver_count"].get<int>();
+    }
         cout << endl;
     }
     else
     {
         cerr << title << " failed: " << response.value("errmsg", "unknown error") << endl;
+    }
+}
+
+void doHistoryResponse(json &response)
+{
+    if (response.value("errno", ERR_MESSAGE_HISTORY_INVALID_SCOPE) != ERR_OK)
+    {
+        cerr << "history query failed: " << response.value("errmsg", "unknown error") << endl;
+        return;
+    }
+
+    cout << "history query success";
+    if (response.contains("scope"))
+    {
+        cout << ", scope: " << response["scope"].get<string>();
+    }
+    if (response.contains("targetid"))
+    {
+        cout << ", targetid: " << response["targetid"].get<int>();
+    }
+    if (response.contains("groupid"))
+    {
+        cout << ", groupid: " << response["groupid"].get<int>();
+    }
+    cout << endl;
+
+    vector<string> history = response.value("history", vector<string>{});
+    for (const string &item : history)
+    {
+        json js = json::parse(item);
+        if (response.value("scope", string("direct")) == "group")
+        {
+            cout << js.value("created_at", "") << " [group " << js.value("group_id", 0)
+                 << "] sender=" << js.value("sender_id", 0)
+                 << " recalled=" << js.value("recalled", 0)
+                 << " message=" << js.value("message", "") << endl;
+        }
+        else
+        {
+            cout << js.value("created_at", "") << " sender=" << js.value("sender_id", 0)
+                 << " receiver=" << js.value("receiver_id", 0)
+                 << " recalled=" << js.value("recalled", 0)
+                 << " message=" << js.value("message", "") << endl;
+        }
+    }
+}
+
+void doSearchUserResponse(json &response)
+{
+    if (response.value("errno", ERR_USER_SEARCH_KEYWORD_EMPTY) != ERR_OK)
+    {
+        cerr << "search user failed: " << response.value("errmsg", "unknown error") << endl;
+        return;
+    }
+
+    cout << "search user success";
+    if (response.contains("keyword"))
+    {
+        cout << ", keyword: " << response["keyword"].get<string>();
+    }
+    cout << endl;
+
+    vector<string> users = response.value("users", vector<string>{});
+    for (const string &item : users)
+    {
+        json js = json::parse(item);
+        cout << "user id=" << js.value("id", 0)
+             << ", name=" << js.value("name", "")
+             << ", state=" << js.value("state", "offline")
+             << ", is_friend=" << (js.value("is_friend", false) ? "true" : "false")
+             << ", has_blocked=" << (js.value("has_blocked", false) ? "true" : "false")
+             << ", blocked_by_target=" << (js.value("blocked_by_target", false) ? "true" : "false")
+             << endl;
     }
 }
 
@@ -356,6 +438,11 @@ void readTaskHandler(int clientfd)
 
         // 接收成功，处理数据
         json js = json::parse(buffer);
+        if (js.value("version", CHAT_PROTOCOL_VERSION) != CHAT_PROTOCOL_VERSION)
+        {
+            cerr << "protocol version mismatch: " << js.value("version", -1) << endl;
+            continue;
+        }
         int msgtype = js["msgid"].get<int>();
         // 根据消息类型做不同的处理
         if (ONE_CHAT_MSG == msgtype)
@@ -458,6 +545,26 @@ void readTaskHandler(int clientfd)
                  << ", operator=" << js["operator_id"].get<int>() << endl;
             continue;
         }
+        else if (QUERY_HISTORY_MSG_ACK == msgtype)
+        {
+            doHistoryResponse(js);
+            continue;
+        }
+        else if (SEARCH_USER_MSG_ACK == msgtype)
+        {
+            doSearchUserResponse(js);
+            continue;
+        }
+        else if (ADD_BLACKLIST_MSG_ACK == msgtype)
+        {
+            doGenericAck("add blacklist", js);
+            continue;
+        }
+        else if (REMOVE_BLACKLIST_MSG_ACK == msgtype)
+        {
+            doGenericAck("remove blacklist", js);
+            continue;
+        }
     }
 }
 
@@ -511,6 +618,16 @@ void setrole(int, string);
 void readmsg(int, string);
 // "recall" command handler
 void recallmsg(int, string);
+// "history" command handler
+void historymsg(int, string);
+// "grouphistory" command handler
+void grouphistory(int, string);
+// "searchuser" command handler
+void searchuser(int, string);
+// "blockuser" command handler
+void blockuser(int, string);
+// "unblockuser" command handler
+void unblockuser(int, string);
 
 // 系统支持的客户端命令列表
 unordered_map<string, string> commandMap = {
@@ -522,6 +639,11 @@ unordered_map<string, string> commandMap = {
     {"leavegroup", "退出群组,格式leavegroup:groupid"},
     {"setrole", "设置群成员角色,格式setrole:groupid:userid:normal|admin"},
     {"groupchat", "群聊,格式groupchat:groupid:message"},
+    {"history", "查询私聊历史,格式history:targetid[:limit[:offset]]"},
+    {"grouphistory", "查询群历史,格式grouphistory:groupid[:limit[:offset]]"},
+    {"searchuser", "搜索用户,格式searchuser:keyword[:limit[:offset]]"},
+    {"blockuser", "加入黑名单,格式blockuser:userid"},
+    {"unblockuser", "移出黑名单,格式unblockuser:userid"},
     {"readmsg", "标记消息已读,格式readmsg:message_id"},
     {"recall", "撤回消息,格式recall:message_id[:toid|groupid]"},
     {"loginout", "注销,格式loginout"}};
@@ -536,6 +658,11 @@ unordered_map<string, function<void(int, string)>> commandHandlerMap = {
     {"leavegroup", leavegroup},
     {"setrole", setrole},
     {"groupchat", groupchat},
+    {"history", historymsg},
+    {"grouphistory", grouphistory},
+    {"searchuser", searchuser},
+    {"blockuser", blockuser},
+    {"unblockuser", unblockuser},
     {"readmsg", readmsg},
     {"recall", recallmsg},
     {"loginout", loginout}};
@@ -586,8 +713,7 @@ void addfriend(int clientfd, string str)
 {
     int friendid = atoi(str.c_str());
     json js;
-    js["msgid"] = ADD_FRIEND_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, ADD_FRIEND_MSG);
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["friendid"] = friendid;
 
@@ -615,8 +741,7 @@ void chat(int clientfd, string str)
     int friendid = atoi(str.substr(0, idx).c_str());
     string msg = str.substr(idx + 1);
     json js;
-    js["msgid"] = ONE_CHAT_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, ONE_CHAT_MSG);
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["name"] = g_CurrentUser.GetName();
     js["toid"] = friendid;
@@ -643,8 +768,7 @@ void creategroup(int clientfd, string str)
     string groupname = str.substr(0, idx);
     string groupdesc = str.substr(idx + 1);
     json js;
-    js["msgid"] = CREATE_GROUP_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, CREATE_GROUP_MSG);
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["groupname"] = groupname;
     js["groupdesc"] = groupdesc;
@@ -662,8 +786,7 @@ void addgroup(int clientfd, string str)
 {
     int groupid = atoi(str.c_str());
     json js;
-    js["msgid"] = ADD_GROUP_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, ADD_GROUP_MSG);
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["groupid"] = groupid;
 
@@ -687,8 +810,7 @@ void groupchat(int clientfd, string str)
     int groupid = atoi(str.substr(0, idx).c_str());
     string msg = str.substr(idx + 1);
     json js;
-    js["msgid"] = GROUP_CHAT_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, GROUP_CHAT_MSG);
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
     js["name"] = g_CurrentUser.GetName();
     js["groupid"] = groupid;
@@ -707,8 +829,7 @@ void groupchat(int clientfd, string str)
 void loginout(int clientfd, string)
 {
     json js;
-    js["msgid"] = LOGINOUT_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, LOGINOUT_MSG);
     js["id"] = g_CurrentUser.GetId(); // 当前登录用户id
 
     string request = js.dump();
@@ -728,8 +849,7 @@ void leavegroup(int clientfd, string str)
 {
     int groupid = atoi(str.c_str());
     json js;
-    js["msgid"] = LEAVE_GROUP_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, LEAVE_GROUP_MSG);
     js["id"] = g_CurrentUser.GetId();
     js["groupid"] = groupid;
 
@@ -754,8 +874,7 @@ void setrole(int clientfd, string str)
     string role = str.substr(second + 1);
 
     json js;
-    js["msgid"] = SET_GROUP_ROLE_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, SET_GROUP_ROLE_MSG);
     js["id"] = g_CurrentUser.GetId();
     js["groupid"] = groupid;
     js["targetid"] = targetid;
@@ -771,8 +890,7 @@ void readmsg(int clientfd, string str)
 {
     long long message_id = atoll(str.c_str());
     json js;
-    js["msgid"] = MARK_READ_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, MARK_READ_MSG);
     js["id"] = g_CurrentUser.GetId();
     js["message_id"] = message_id;
     string request = js.dump();
@@ -809,8 +927,7 @@ void recallmsg(int clientfd, string str)
     }
 
     json js;
-    js["msgid"] = RECALL_MSG;
-    js["request_id"] = nextRequestId();
+    setProtocolMeta(js, RECALL_MSG);
     js["id"] = g_CurrentUser.GetId();
     js["message_id"] = message_id;
     if (target > 0)
@@ -829,6 +946,134 @@ void recallmsg(int clientfd, string str)
     if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
     {
         cerr << "send recall msg error: " << request << endl;
+    }
+}
+
+vector<string> splitArgs(const string &text)
+{
+    vector<string> parts;
+    size_t start = 0;
+    while (start <= text.size())
+    {
+        size_t pos = text.find(':', start);
+        if (pos == string::npos)
+        {
+            parts.push_back(text.substr(start));
+            break;
+        }
+        parts.push_back(text.substr(start, pos - start));
+        start = pos + 1;
+    }
+    return parts;
+}
+
+void historymsg(int clientfd, string str)
+{
+    vector<string> parts = splitArgs(str);
+    if (parts.empty() || parts[0].empty())
+    {
+        cerr << "invalid history format, please use: history:targetid[:limit[:offset]]" << endl;
+        return;
+    }
+
+    int targetid = atoi(parts[0].c_str());
+    int limit = parts.size() > 1 && !parts[1].empty() ? atoi(parts[1].c_str()) : 20;
+    int offset = parts.size() > 2 && !parts[2].empty() ? atoi(parts[2].c_str()) : 0;
+
+    json js;
+    setProtocolMeta(js, QUERY_HISTORY_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["targetid"] = targetid;
+    js["limit"] = limit;
+    js["offset"] = offset;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send history query error: " << request << endl;
+    }
+}
+
+void grouphistory(int clientfd, string str)
+{
+    vector<string> parts = splitArgs(str);
+    if (parts.empty() || parts[0].empty())
+    {
+        cerr << "invalid grouphistory format, please use: grouphistory:groupid[:limit[:offset]]" << endl;
+        return;
+    }
+
+    int groupid = atoi(parts[0].c_str());
+    int limit = parts.size() > 1 && !parts[1].empty() ? atoi(parts[1].c_str()) : 20;
+    int offset = parts.size() > 2 && !parts[2].empty() ? atoi(parts[2].c_str()) : 0;
+
+    json js;
+    setProtocolMeta(js, QUERY_HISTORY_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["groupid"] = groupid;
+    js["limit"] = limit;
+    js["offset"] = offset;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send group history query error: " << request << endl;
+    }
+}
+
+void searchuser(int clientfd, string str)
+{
+    vector<string> parts = splitArgs(str);
+    if (parts.empty() || parts[0].empty())
+    {
+        cerr << "invalid searchuser format, please use: searchuser:keyword[:limit[:offset]]" << endl;
+        return;
+    }
+
+    int limit = parts.size() > 1 && !parts[1].empty() ? atoi(parts[1].c_str()) : 20;
+    int offset = parts.size() > 2 && !parts[2].empty() ? atoi(parts[2].c_str()) : 0;
+
+    json js;
+    setProtocolMeta(js, SEARCH_USER_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["keyword"] = parts[0];
+    js["limit"] = limit;
+    js["offset"] = offset;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send search user msg error: " << request << endl;
+    }
+}
+
+void blockuser(int clientfd, string str)
+{
+    int targetid = atoi(str.c_str());
+    json js;
+    setProtocolMeta(js, ADD_BLACKLIST_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["targetid"] = targetid;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send add blacklist msg error: " << request << endl;
+    }
+}
+
+void unblockuser(int clientfd, string str)
+{
+    int targetid = atoi(str.c_str());
+    json js;
+    setProtocolMeta(js, REMOVE_BLACKLIST_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["targetid"] = targetid;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send remove blacklist msg error: " << request << endl;
     }
 }
 

@@ -2,6 +2,7 @@
 #include "json.hpp"
 #include "chatservice.hpp"
 #include "appconfig.hpp"
+#include "public.hpp"
 #include <iostream>
 #include <functional>
 #include <string>
@@ -44,12 +45,37 @@ void ChatServer::onMessage(const TcpConnectionPtr &conn,
     try
     {
         json js = json::parse(buf);
+        if (!js.contains("version"))
+        {
+            json resp;
+            resp["version"] = CHAT_PROTOCOL_VERSION;
+            resp["msgid"] = -1;
+            resp["request_id"] = js.value("request_id", "");
+            resp["errno"] = ERR_PROTOCOL_MISSING_VERSION;
+            resp["errmsg"] = "missing version";
+            conn->send(resp.dump());
+            return;
+        }
+
+        if (!js["version"].is_number_integer() || js["version"].get<int>() != CHAT_PROTOCOL_VERSION)
+        {
+            json resp;
+            resp["version"] = CHAT_PROTOCOL_VERSION;
+            resp["msgid"] = -1;
+            resp["request_id"] = js.value("request_id", "");
+            resp["errno"] = ERR_PROTOCOL_UNSUPPORTED_VERSION;
+            resp["errmsg"] = "unsupported version";
+            conn->send(resp.dump());
+            return;
+        }
+
         if (!js.contains("msgid"))
         {
             json resp;
+            resp["version"] = CHAT_PROTOCOL_VERSION;
             resp["msgid"] = -1;
             resp["request_id"] = js.value("request_id", "");
-            resp["errno"] = 400;
+            resp["errno"] = ERR_PROTOCOL_MISSING_MSGID;
             resp["errmsg"] = "missing msgid";
             conn->send(resp.dump());
             return;
@@ -61,9 +87,10 @@ void ChatServer::onMessage(const TcpConnectionPtr &conn,
     catch (const std::exception &e)
     {
         json resp;
+        resp["version"] = CHAT_PROTOCOL_VERSION;
         resp["msgid"] = -1;
         resp["request_id"] = "";
-        resp["errno"] = 400;
+        resp["errno"] = ERR_PROTOCOL_INVALID_JSON;
         resp["errmsg"] = string("invalid json: ") + e.what();
         conn->send(resp.dump());
     }

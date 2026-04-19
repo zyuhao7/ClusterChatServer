@@ -19,12 +19,19 @@ public:
         int group_id,
         const std::string &message);
 
+    long long queryMessageIdByRequestId(const std::string &request_id);
+
     bool markRead(long long message_id, int userid);
     bool recallMessage(long long message_id, int operator_id);
 
     std::vector<std::string> queryConversation(
         int user_a,
         int user_b,
+        int limit,
+        int offset);
+
+    std::vector<std::string> queryGroupConversation(
+        int group_id,
         int limit,
         int offset);
 };

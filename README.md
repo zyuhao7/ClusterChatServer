@@ -28,7 +28,14 @@ C++ 实现的集群聊天服务器，支持多服务器负载均衡与跨服务�
 - 统一配置文件：`config/server.conf`
 - 数据库迁移脚本：`db/migrations/`
 - 消息历史、已读/撤回基础字段
-- 统一 ACK 结构与 `request_id`
+- 统一 ACK 结构、协议 `version` 与 `request_id`
+- 统一错误码常量，服务端/客户端/验证脚本使用同一套编号
+- 离线消息条数限制，可配置保留最近 N 条
+- 聊天消息基于 `request_id` 做幂等，避免重复投递
+- 服务启动/退出时会恢复在线用户状态，降低异常退出残留影响
+- 群组操作补充权限边界校验，避免非法创建群或修改群主角色
+- 支持私聊/群聊历史消息分页查询
+- 支持搜索用户、黑名单增删与黑名单拦截发消息/加好友
 - 群组权限校验、退群、角色调整
 - bcrypt 密码哈希与迁移脚本
 - 管理后台审计/封禁接口
@@ -236,6 +243,7 @@ mysql -uroot -p < chat.sql
 mysql -uroot -p chat < db/migrations/001_constraints_and_indexes.sql
 mysql -uroot -p chat < db/migrations/002_message_history_and_admin_tables.sql
 mysql -uroot -p chat < db/migrations/003_password_hashing_prep.sql
+mysql -uroot -p chat < db/migrations/004_user_blacklist.sql
 ```
 
 如果在 Ubuntu 上执行时出现：
@@ -436,7 +444,7 @@ uvicorn admin_service.app.main:app --reload --host 127.0.0.1 --port 8010
 - `GET /health`
 - `GET /health/db`
 - `GET /metrics`
-- `GET /api/v1/users`
+- `GET /api/v1/users` (`state=online|offline|banned`)
 - `GET /api/v1/users/{user_id}`
 - `GET /api/v1/friends`
 - `GET /api/v1/groups`

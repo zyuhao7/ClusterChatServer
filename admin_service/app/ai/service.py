@@ -16,11 +16,12 @@ class AITask:
 
 class AIWorker:
     def __init__(self) -> None:
-        self._queue: asyncio.Queue[AITask] = asyncio.Queue()
+        self._queue: asyncio.Queue[AITask] | None = None
         self._worker_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         if self._worker_task is None:
+            self._queue = asyncio.Queue()
             self._worker_task = asyncio.create_task(self._loop())
 
     async def stop(self) -> None:
@@ -31,6 +32,7 @@ class AIWorker:
             except asyncio.CancelledError:
                 pass
             self._worker_task = None
+            self._queue = None
 
     async def submit(self, task_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         # Keep the queue-based worker structure available for future expansion,
@@ -44,6 +46,9 @@ class AIWorker:
         return {"ok": False, "errmsg": "unsupported task type"}
 
     async def _loop(self) -> None:
+        if self._queue is None:
+            return
+
         while True:
             task = await self._queue.get()
             try:

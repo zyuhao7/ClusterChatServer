@@ -114,7 +114,7 @@ pytest tests/integration/test_admin_service.py -q
 - `GET /health`
 - `GET /health/db`
 - `GET /metrics`
-- `GET /api/v1/users`
+- `GET /api/v1/users` (`state=online|offline|banned`)
 - `GET /api/v1/users/{user_id}`
 - `GET /api/v1/friends`
 - `GET /api/v1/groups`

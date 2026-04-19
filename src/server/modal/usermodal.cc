@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
 using namespace std;
 
 bool UserModal::Insert(User& user)
@@ -79,6 +80,35 @@ User UserModal::queryByName(const string &name)
         }
     }
     return User();
+}
+
+vector<User> UserModal::searchByName(const string &keyword, int limit, int offset)
+{
+    char sql[2048] = {0};
+    sprintf(sql,
+            "select id, name, state from user where name like '%%%s%%' order by id asc limit %d offset %d",
+            keyword.c_str(), limit, offset);
+
+    vector<User> users;
+    MySQL mysql;
+    if(mysql.connect())
+    {
+        MYSQL_RES* res = mysql.query(sql);
+        if(res != nullptr)
+        {
+            MYSQL_ROW row;
+            while((row = mysql_fetch_row(res)) != nullptr)
+            {
+                User user;
+                user.SetId(atoi(row[0]));
+                user.SetName(row[1]);
+                user.SetState(row[2]);
+                users.push_back(user);
+            }
+            mysql_free_result(res);
+        }
+    }
+    return users;
 }
 
 bool UserModal::updateState(User& user)

@@ -111,6 +111,10 @@ void AppConfig::applyRawMap()
     {
         _server.bcrypt_cost = num;
     }
+    if (parseInt(getRaw("server.offline_message_limit"), &num) && num > 0)
+    {
+        _server.offline_message_limit = num;
+    }
 }
 
 std::string AppConfig::trim(const std::string &s)

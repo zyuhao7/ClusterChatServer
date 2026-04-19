@@ -1,6 +1,7 @@
 #include "messagehistorymodal.hpp"
 
 #include "db.h"
+#include <cstdlib>
 #include <cstdio>
 
 long long MessageHistoryModal::insertDirect(
@@ -49,6 +50,40 @@ long long MessageHistoryModal::insertGroup(
         return -1;
     }
     return static_cast<long long>(mysql_insert_id(mysql.getConnection()));
+}
+
+long long MessageHistoryModal::queryMessageIdByRequestId(const std::string &request_id)
+{
+    if (request_id.empty())
+    {
+        return -1;
+    }
+
+    char sql[1024] = {0};
+    sprintf(sql,
+            "select id from message_history where request_id = '%s' order by id asc limit 1",
+            request_id.c_str());
+
+    MySQL mysql;
+    if (!mysql.connect())
+    {
+        return -1;
+    }
+
+    MYSQL_RES *res = mysql.query(sql);
+    if (res == nullptr)
+    {
+        return -1;
+    }
+
+    long long message_id = -1;
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (row != nullptr)
+    {
+        message_id = atoll(row[0]);
+    }
+    mysql_free_result(res);
+    return message_id;
 }
 
 bool MessageHistoryModal::markRead(long long message_id, int userid)
@@ -117,6 +152,50 @@ std::vector<std::string> MessageHistoryModal::queryConversation(
         line += "\"id\":" + std::string(row[0] ? row[0] : "0");
         line += ",\"sender_id\":" + std::string(row[1] ? row[1] : "0");
         line += ",\"receiver_id\":" + std::string(row[2] ? row[2] : "0");
+        line += ",\"message\":\"" + std::string(row[3] ? row[3] : "") + "\"";
+        line += ",\"read_state\":\"" + std::string(row[4] ? row[4] : "unread") + "\"";
+        line += ",\"recalled\":" + std::string(row[5] ? row[5] : "0");
+        line += ",\"created_at\":\"" + std::string(row[6] ? row[6] : "") + "\"";
+        line += "}";
+        result.push_back(line);
+    }
+
+    mysql_free_result(res);
+    return result;
+}
+
+std::vector<std::string> MessageHistoryModal::queryGroupConversation(
+    int group_id,
+    int limit,
+    int offset)
+{
+    char sql[1024] = {0};
+    sprintf(sql,
+            "select id, sender_id, group_id, message, read_state, recalled, created_at "
+            "from message_history where msg_type='group' and group_id=%d "
+            "order by id desc limit %d offset %d",
+            group_id, limit, offset);
+
+    std::vector<std::string> result;
+    MySQL mysql;
+    if (!mysql.connect())
+    {
+        return result;
+    }
+
+    MYSQL_RES *res = mysql.query(sql);
+    if (res == nullptr)
+    {
+        return result;
+    }
+
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(res)) != nullptr)
+    {
+        std::string line = "{";
+        line += "\"id\":" + std::string(row[0] ? row[0] : "0");
+        line += ",\"sender_id\":" + std::string(row[1] ? row[1] : "0");
+        line += ",\"group_id\":" + std::string(row[2] ? row[2] : "0");
         line += ",\"message\":\"" + std::string(row[3] ? row[3] : "") + "\"";
         line += ",\"read_state\":\"" + std::string(row[4] ? row[4] : "unread") + "\"";
         line += ",\"recalled\":" + std::string(row[5] ? row[5] : "0");

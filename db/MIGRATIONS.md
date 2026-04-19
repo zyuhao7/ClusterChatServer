@@ -22,6 +22,7 @@ sudo mysql < chat.sql
 mysql -uroot -p chat < db/migrations/001_constraints_and_indexes.sql
 mysql -uroot -p chat < db/migrations/002_message_history_and_admin_tables.sql
 mysql -uroot -p chat < db/migrations/003_password_hashing_prep.sql
+mysql -uroot -p chat < db/migrations/004_user_blacklist.sql
 ```
 
 ## 001_constraints_and_indexes.sql
@@ -48,6 +49,12 @@ After migration `003`, run one-time plaintext password migration:
 ```bash
 python3 scripts/migrate_passwords.py --user root --database chat
 ```
+
+## 004_user_blacklist.sql
+
+Creates:
+
+- `user_blacklist`
 
 ## Rollback Guidance
 

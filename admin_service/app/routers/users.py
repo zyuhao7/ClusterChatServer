@@ -9,11 +9,16 @@ router = APIRouter(tags=["users"])
 
 @router.get("/users")
 def list_users(
+    state: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    rows = db.query(User).offset(offset).limit(limit).all()
+    query = db.query(User)
+    if state is not None:
+        query = query.filter(User.state == state)
+
+    rows = query.offset(offset).limit(limit).all()
     return [
         {
             "id": row.id,

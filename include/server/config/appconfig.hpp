@@ -28,6 +28,7 @@ struct ServerSettings
     int thread_num = 4;
     std::string log_level = "INFO";
     int bcrypt_cost = 10;
+    int offline_message_limit = 200;
 };
 
 class AppConfig

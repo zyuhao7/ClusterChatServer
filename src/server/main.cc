@@ -33,6 +33,11 @@ static muduo::Logger::LogLevel parseLogLevel(const std::string &log_level)
     return muduo::Logger::INFO;
 }
 
+void cleanupOnExit()
+{
+    ChatService::instance()->reset();
+}
+
 // 处理 Ctrl + c 信号
 void resetHandler(int)
 {
@@ -96,7 +101,10 @@ int main(int argc, char **argv)
 
     muduo::Logger::setLogLevel(parseLogLevel(AppConfig::instance().server().log_level));
 
+    std::atexit(cleanupOnExit);
+    ChatService::instance()->reset();
     signal(SIGINT, resetHandler);
+    signal(SIGTERM, resetHandler);
 
     EventLoop loop;
     InetAddress addr(ip, port);

@@ -33,6 +33,7 @@ void test_app_config_loads_values()
     out << "server.port = 9900\n";
     out << "server.thread_num = 8\n";
     out << "server.log_level = DEBUG\n";
+    out << "server.offline_message_limit = 88\n";
     out << "security.bcrypt_cost = 12\n";
     out.close();
 
@@ -49,6 +50,7 @@ void test_app_config_loads_values()
     assert(cfg.server().port == 9900);
     assert(cfg.server().thread_num == 8);
     assert(cfg.server().log_level == "DEBUG");
+    assert(cfg.server().offline_message_limit == 88);
     assert(cfg.server().bcrypt_cost == 12);
 }
 

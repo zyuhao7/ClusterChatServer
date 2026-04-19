@@ -2,9 +2,11 @@
 #define CHATSERVICE_H
 #include <muduo/net/TcpConnection.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
 #include <mutex>
 #include "json.hpp"
+#include "blacklistmodal.hpp"
 #include "offlinemsgmodal.hpp"
 #include "usermodal.hpp"
 #include "friendmodal.hpp"
@@ -57,21 +59,28 @@ public:
   void markRead(const TcpConnectionPtr &conn, json &js, Timestamp time);
   // 撤回消息
   void recallMessage(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  void queryHistory(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  void searchUser(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  void addBlacklist(const TcpConnectionPtr &conn, json &js, Timestamp time);
+  void removeBlacklist(const TcpConnectionPtr &conn, json &js, Timestamp time);
 
 private:
   ChatService();
   string requestIdFrom(const json &js) const;
   void sendAck(const TcpConnectionPtr &conn, int ack_msgid, const string &request_id,
                int err_no, const string &err_msg, const json &extra = json::object()) const;
+  void unsubscribeUserChannel(int userid);
   // 存储消息id和其对应的业务处理方法
   unordered_map<int, MsgHandler> _msgHandlerMap;
   // 存储在线用户的通信连接
   unordered_map<int, TcpConnectionPtr> _userConnMap;
+  unordered_set<int> _subscribedUsers;
 
   // 数据操作类对象
   UserModal _userModal;
   OfflineMsgModal _offlineMsgModal;
   FriendModal _friendModal;
+  BlacklistModal _blacklistModal;
   GroupModal _groupModal;
   MessageHistoryModal _messageHistoryModal;
 

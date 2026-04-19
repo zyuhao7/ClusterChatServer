@@ -1,5 +1,6 @@
 # Local tooling
 .codex
+.cache/
 *.tmp
 *.log
 *.swp
