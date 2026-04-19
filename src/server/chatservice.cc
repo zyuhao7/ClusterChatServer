@@ -723,6 +723,12 @@ void ChatService::queryHistory(const TcpConnectionPtr &conn, json &js, Timestamp
     int userid = js["id"].get<int>();
     int limit = js.value("limit", 20);
     int offset = js.value("offset", 0);
+    string order = js.value("order", "desc");
+    bool ascending = (order == "asc");
+    if (!ascending && order != "desc")
+    {
+        order = "desc";
+    }
     if (limit <= 0)
     {
         limit = 20;
@@ -739,6 +745,7 @@ void ChatService::queryHistory(const TcpConnectionPtr &conn, json &js, Timestamp
     json extra;
     extra["limit"] = limit;
     extra["offset"] = offset;
+    extra["order"] = order;
 
     if (js.contains("groupid"))
     {
@@ -753,7 +760,7 @@ void ChatService::queryHistory(const TcpConnectionPtr &conn, json &js, Timestamp
             sendAck(conn, QUERY_HISTORY_MSG_ACK, request_id, ERR_GROUP_HISTORY_ACCESS_DENIED, "无权查看该群历史消息");
             return;
         }
-        extra["history"] = _messageHistoryModal.queryGroupConversation(groupid, limit, offset);
+        extra["history"] = _messageHistoryModal.queryGroupConversation(groupid, limit, offset, ascending);
         extra["scope"] = "group";
         extra["groupid"] = groupid;
         sendAck(conn, QUERY_HISTORY_MSG_ACK, request_id, ERR_OK, "", extra);
@@ -773,7 +780,7 @@ void ChatService::queryHistory(const TcpConnectionPtr &conn, json &js, Timestamp
         return;
     }
 
-    extra["history"] = _messageHistoryModal.queryConversation(userid, targetid, limit, offset);
+    extra["history"] = _messageHistoryModal.queryConversation(userid, targetid, limit, offset, ascending);
     extra["scope"] = "direct";
     extra["targetid"] = targetid;
     sendAck(conn, QUERY_HISTORY_MSG_ACK, request_id, ERR_OK, "", extra);

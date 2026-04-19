@@ -28,12 +28,14 @@ public:
         int user_a,
         int user_b,
         int limit,
-        int offset);
+        int offset,
+        bool ascending);
 
     std::vector<std::string> queryGroupConversation(
         int group_id,
         int limit,
-        int offset);
+        int offset,
+        bool ascending);
 };
 
 #endif

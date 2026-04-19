@@ -425,6 +425,31 @@ def verify_history_pagination(sock: socket.socket, now: int, args: argparse.Name
         history_page2 = [json.loads(item) for item in query_resp_2.get("history", [])]
         if len(history_page2) != 1 or history_page2[0].get("message") != "history message 0":
             return 38
+
+        asc_query_req = {
+            "version": 1,
+            "msgid": 26,
+            "request_id": f"hist-query-asc-{now}",
+            "id": sender_id,
+            "targetid": receiver_id,
+            "limit": 3,
+            "offset": 0,
+            "order": "asc",
+        }
+        sock.sendall(json.dumps(asc_query_req).encode("utf-8"))
+        asc_query_resp = recv_json(sock)
+        print("HIST_QUERY_ASC", asc_query_resp)
+        if asc_query_resp.get("errno") != ERR_OK:
+            return 39
+        if asc_query_resp.get("order") != "asc":
+            return 40
+        history_asc = [json.loads(item) for item in asc_query_resp.get("history", [])]
+        if len(history_asc) != 3:
+            return 41
+        if history_asc[0].get("message") != "history message 0":
+            return 42
+        if history_asc[2].get("message") != "history message 2":
+            return 43
         return 0
     finally:
         if sender_id > 0 and receiver_id > 0:

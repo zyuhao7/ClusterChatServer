@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timedelta
 import sys
 
 import pytest
@@ -13,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from admin_service.app.db.database import get_db
 from admin_service.app.main import app
-from admin_service.app.models.models import Base, User
+from admin_service.app.models.models import Base, MessageHistory, User
 
 
 @pytest.fixture
@@ -121,3 +122,53 @@ def test_ban_and_unban_user_updates_state(client: TestClient) -> None:
     offline_users = client.get("/api/v1/users", params={"state": "offline"})
     offline_payload = offline_users.json()
     assert any(user["id"] == 2 and user["state"] == "offline" for user in offline_payload)
+
+
+def test_history_orders_by_created_at(client: TestClient) -> None:
+    base_time = datetime(2026, 4, 19, 16, 30, 0)
+
+    db = next(iter(app.dependency_overrides[get_db]()))
+    try:
+        db.add_all(
+            [
+                MessageHistory(
+                    request_id="hist-1",
+                    sender_id=1,
+                    receiver_id=2,
+                    group_id=None,
+                    message="older",
+                    msg_type="direct",
+                    read_state="unread",
+                    recalled=0,
+                    created_at=base_time,
+                ),
+                MessageHistory(
+                    request_id="hist-2",
+                    sender_id=1,
+                    receiver_id=2,
+                    group_id=None,
+                    message="newer",
+                    msg_type="direct",
+                    read_state="unread",
+                    recalled=0,
+                    created_at=base_time + timedelta(minutes=1),
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    desc_resp = client.get(
+        "/api/v1/history",
+        params={"user_a": 1, "user_b": 2, "order": "desc"},
+    )
+    assert desc_resp.status_code == 200
+    assert [item["message"] for item in desc_resp.json()] == ["newer", "older"]
+
+    asc_resp = client.get(
+        "/api/v1/history",
+        params={"user_a": 1, "user_b": 2, "order": "asc"},
+    )
+    assert asc_resp.status_code == 200
+    assert [item["message"] for item in asc_resp.json()] == ["older", "newer"]

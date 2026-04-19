@@ -14,6 +14,7 @@ def list_message_history(
     group_id: int | None = Query(default=None, ge=1),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ) -> list[dict]:
     sql = """
@@ -42,6 +43,6 @@ def list_message_history(
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)
 
-    sql += " ORDER BY id DESC LIMIT :limit OFFSET :offset"
+    sql += f" ORDER BY created_at {order}, id {order} LIMIT :limit OFFSET :offset"
     rows = db.execute(text(sql), params).mappings().all()
     return [dict(row) for row in rows]

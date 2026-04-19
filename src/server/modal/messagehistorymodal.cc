@@ -122,15 +122,17 @@ std::vector<std::string> MessageHistoryModal::queryConversation(
     int user_a,
     int user_b,
     int limit,
-    int offset)
+    int offset,
+    bool ascending)
 {
     char sql[1024] = {0};
+    const char *sort_order = ascending ? "asc" : "desc";
     sprintf(sql,
             "select id, sender_id, receiver_id, message, read_state, recalled, created_at "
             "from message_history where msg_type='direct' and "
             "((sender_id=%d and receiver_id=%d) or (sender_id=%d and receiver_id=%d)) "
-            "order by id desc limit %d offset %d",
-            user_a, user_b, user_b, user_a, limit, offset);
+            "order by created_at %s, id %s limit %d offset %d",
+            user_a, user_b, user_b, user_a, sort_order, sort_order, limit, offset);
 
     std::vector<std::string> result;
     MySQL mysql;
@@ -167,14 +169,16 @@ std::vector<std::string> MessageHistoryModal::queryConversation(
 std::vector<std::string> MessageHistoryModal::queryGroupConversation(
     int group_id,
     int limit,
-    int offset)
+    int offset,
+    bool ascending)
 {
     char sql[1024] = {0};
+    const char *sort_order = ascending ? "asc" : "desc";
     sprintf(sql,
             "select id, sender_id, group_id, message, read_state, recalled, created_at "
             "from message_history where msg_type='group' and group_id=%d "
-            "order by id desc limit %d offset %d",
-            group_id, limit, offset);
+            "order by created_at %s, id %s limit %d offset %d",
+            group_id, sort_order, sort_order, limit, offset);
 
     std::vector<std::string> result;
     MySQL mysql;

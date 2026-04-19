@@ -360,6 +360,10 @@ void doHistoryResponse(json &response)
     {
         cout << ", scope: " << response["scope"].get<string>();
     }
+    if (response.contains("order"))
+    {
+        cout << ", order: " << response["order"].get<string>();
+    }
     if (response.contains("targetid"))
     {
         cout << ", targetid: " << response["targetid"].get<int>();
@@ -639,8 +643,8 @@ unordered_map<string, string> commandMap = {
     {"leavegroup", "退出群组,格式leavegroup:groupid"},
     {"setrole", "设置群成员角色,格式setrole:groupid:userid:normal|admin"},
     {"groupchat", "群聊,格式groupchat:groupid:message"},
-    {"history", "查询私聊历史,格式history:targetid[:limit[:offset]]"},
-    {"grouphistory", "查询群历史,格式grouphistory:groupid[:limit[:offset]]"},
+    {"history", "查询私聊历史,格式history:targetid[:limit[:offset[:asc|desc]]]"},
+    {"grouphistory", "查询群历史,格式grouphistory:groupid[:limit[:offset[:asc|desc]]]"},
     {"searchuser", "搜索用户,格式searchuser:keyword[:limit[:offset]]"},
     {"blockuser", "加入黑名单,格式blockuser:userid"},
     {"unblockuser", "移出黑名单,格式unblockuser:userid"},
@@ -972,13 +976,14 @@ void historymsg(int clientfd, string str)
     vector<string> parts = splitArgs(str);
     if (parts.empty() || parts[0].empty())
     {
-        cerr << "invalid history format, please use: history:targetid[:limit[:offset]]" << endl;
+        cerr << "invalid history format, please use: history:targetid[:limit[:offset[:asc|desc]]]" << endl;
         return;
     }
 
     int targetid = atoi(parts[0].c_str());
     int limit = parts.size() > 1 && !parts[1].empty() ? atoi(parts[1].c_str()) : 20;
     int offset = parts.size() > 2 && !parts[2].empty() ? atoi(parts[2].c_str()) : 0;
+    string order = parts.size() > 3 && !parts[3].empty() ? parts[3] : "desc";
 
     json js;
     setProtocolMeta(js, QUERY_HISTORY_MSG);
@@ -986,6 +991,7 @@ void historymsg(int clientfd, string str)
     js["targetid"] = targetid;
     js["limit"] = limit;
     js["offset"] = offset;
+    js["order"] = order;
 
     string request = js.dump();
     if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
@@ -999,13 +1005,14 @@ void grouphistory(int clientfd, string str)
     vector<string> parts = splitArgs(str);
     if (parts.empty() || parts[0].empty())
     {
-        cerr << "invalid grouphistory format, please use: grouphistory:groupid[:limit[:offset]]" << endl;
+        cerr << "invalid grouphistory format, please use: grouphistory:groupid[:limit[:offset[:asc|desc]]]" << endl;
         return;
     }
 
     int groupid = atoi(parts[0].c_str());
     int limit = parts.size() > 1 && !parts[1].empty() ? atoi(parts[1].c_str()) : 20;
     int offset = parts.size() > 2 && !parts[2].empty() ? atoi(parts[2].c_str()) : 0;
+    string order = parts.size() > 3 && !parts[3].empty() ? parts[3] : "desc";
 
     json js;
     setProtocolMeta(js, QUERY_HISTORY_MSG);
@@ -1013,6 +1020,7 @@ void grouphistory(int clientfd, string str)
     js["groupid"] = groupid;
     js["limit"] = limit;
     js["offset"] = offset;
+    js["order"] = order;
 
     string request = js.dump();
     if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
