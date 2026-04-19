@@ -197,6 +197,12 @@ button {
     gap: 12px;
 }
 
+.session-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 .session {
     width: 100%;
     padding: 14px;
@@ -232,6 +238,30 @@ button {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.recent-contact-list,
+.download-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.recent-contact,
+.download-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(2, 6, 23, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    text-align: left;
+}
+
+.small-text {
+    font-size: 12px;
 }
 
 .badge-unread {

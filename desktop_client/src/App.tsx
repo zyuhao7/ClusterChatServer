@@ -112,6 +112,15 @@ export default function App() {
             return b.latestTimestamp.localeCompare(a.latestTimestamp)
         })
     }, [sessionFilter, store.pinnedSessionIds, store.sessions])
+    const sessionGroups = useMemo(() => ({
+        pinned: sortedSessions.filter((session) => store.pinnedSessionIds.includes(session.sessionId)),
+        direct: sortedSessions.filter((session) => session.kind === "direct" && !store.pinnedSessionIds.includes(session.sessionId)),
+        group: sortedSessions.filter((session) => session.kind === "group" && !store.pinnedSessionIds.includes(session.sessionId)),
+    }), [sortedSessions, store.pinnedSessionIds])
+    const recentContacts = useMemo(
+        () => sortedSessions.filter((session) => session.kind === "direct").slice(0, 5),
+        [sortedSessions],
+    )
     const selectedSession = sortedSessions.find((session) => session.sessionId === store.selectedSessionId) ?? null
     const currentTimelineRaw = selectedSession ? store.timelines[selectedSession.sessionId] ?? [] : []
     const directProfile = selectedSession?.kind === "direct" ? store.friends[selectedSession.rawId] ?? null : null
@@ -142,6 +151,62 @@ export default function App() {
             return attachmentFilter === "all" ? true : Boolean(entry.attachment)
         })
     }, [attachmentFilter, attachmentSearch, currentTimelineRaw])
+    const attachmentLibrary = useMemo(() => {
+        return Object.values(store.timelines)
+            .flat()
+            .filter((entry) => entry.attachment)
+            .map((entry) => ({
+                id: entry.id,
+                sessionId: entry.sessionId,
+                author: entry.author,
+                timestamp: entry.timestamp,
+                attachment: entry.attachment!,
+            }))
+            .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    }, [store.timelines])
+    const groupStats = useMemo(() => {
+        if (!groupProfile) {
+            return null
+        }
+        const adminCount = groupProfile.users.filter((user) => user.role === "admin").length
+        const mutedCount = groupProfile.users.filter((user) => Boolean(user.muted_until)).length
+        return {
+            memberCount: groupProfile.users.length,
+            adminCount,
+            mutedCount,
+        }
+    }, [groupProfile])
+
+    function renderSessionSection(title: string, sessions: typeof sortedSessions) {
+        if (sessions.length === 0) {
+            return null
+        }
+        return (
+            <section className="session-section">
+                <p className="eyebrow">{title}</p>
+                <div className="session-list">
+                    {sessions.map((session) => (
+                        <button
+                            key={session.sessionId}
+                            className={store.selectedSessionId === session.sessionId ? "session session-active" : "session"}
+                            onClick={() => store.setSelectedSessionId(session.sessionId)}
+                            type="button"
+                        >
+                            <div className="session-head-row">
+                                <span className="session-title">{session.title}</span>
+                                <div className="button-row compact-row">
+                                    {store.pinnedSessionIds.includes(session.sessionId) ? <span className="badge">Pinned</span> : null}
+                                    {session.unreadCount > 0 ? <span className="badge badge-unread">{session.unreadCount}</span> : null}
+                                </div>
+                            </div>
+                            <span className="session-meta">{session.kind} · {session.subtitle}</span>
+                            {session.latestMessage ? <span className="session-preview">{session.latestMessage}</span> : null}
+                        </button>
+                    ))}
+                </div>
+            </section>
+        )
+    }
 
     useEffect(() => {
         if (!isTauriRuntime()) {
@@ -409,24 +474,20 @@ export default function App() {
                         <span>Search sessions</span>
                         <input value={sessionFilter} onChange={(event) => setSessionFilter(event.target.value)} placeholder="Search session title or subtitle" />
                     </label>
-                    <div className="session-list">
-                        {sortedSessions.length === 0 ? <p className="muted">No sessions yet.</p> : null}
-                        {sortedSessions.map((session) => (
-                            <button
-                                key={session.sessionId}
-                                className={store.selectedSessionId === session.sessionId ? "session session-active" : "session"}
-                                onClick={() => store.setSelectedSessionId(session.sessionId)}
-                                type="button"
-                            >
-                                <div className="session-head-row">
-                                    <span className="session-title">{session.title}</span>
-                                    <div className="button-row compact-row">
-                                        {store.pinnedSessionIds.includes(session.sessionId) ? <span className="badge">Pinned</span> : null}
-                                        {session.unreadCount > 0 ? <span className="badge badge-unread">{session.unreadCount}</span> : null}
-                                    </div>
-                                </div>
-                                <span className="session-meta">{session.kind} · {session.subtitle}</span>
-                                {session.latestMessage ? <span className="session-preview">{session.latestMessage}</span> : null}
+                    {sortedSessions.length === 0 ? <p className="muted">No sessions yet.</p> : null}
+                    {renderSessionSection("Pinned", sessionGroups.pinned)}
+                    {renderSessionSection("Direct", sessionGroups.direct)}
+                    {renderSessionSection("Groups", sessionGroups.group)}
+                </section>
+
+                <section className="card-section">
+                    <p className="eyebrow">Recent Contacts</p>
+                    <div className="recent-contact-list">
+                        {recentContacts.length === 0 ? <p className="muted">No recent direct sessions.</p> : null}
+                        {recentContacts.map((session) => (
+                            <button key={session.sessionId} className="recent-contact" onClick={() => store.setSelectedSessionId(session.sessionId)} type="button">
+                                <strong>{session.title}</strong>
+                                <span>{session.subtitle}</span>
                             </button>
                         ))}
                     </div>
@@ -691,7 +752,9 @@ export default function App() {
                             <span>ID: {groupProfile.id}</span>
                             <span>{groupProfile.groupdesc}</span>
                             {groupProfile.announcement ? <span>Announcement: {groupProfile.announcement}</span> : null}
-                            <span>Members: {groupProfile.users.length}</span>
+                            <span>Members: {groupStats?.memberCount ?? groupProfile.users.length}</span>
+                            <span>Admins: {groupStats?.adminCount ?? 0}</span>
+                            <span>Muted: {groupStats?.mutedCount ?? 0}</span>
                             {selectedSession ? (
                                 <button onClick={() => store.togglePinnedSession(selectedSession.sessionId)} type="button">
                                     {store.pinnedSessionIds.includes(selectedSession.sessionId) ? "Unpin Session" : "Pin Session"}
@@ -838,6 +901,34 @@ export default function App() {
                 <section>
                     <p className="eyebrow">Last Response</p>
                     <pre className="protocol-box">{store.lastResponse || "No response yet."}</pre>
+                </section>
+                <section className="card-section">
+                    <p className="eyebrow">Download Manager</p>
+                    <div className="download-list">
+                        {attachmentLibrary.length === 0 ? <p className="muted">No attachment history yet.</p> : null}
+                        {attachmentLibrary.slice(0, 8).map((item) => (
+                            <div key={item.id} className="download-item">
+                                <div>
+                                    <strong>{item.attachment.name}</strong>
+                                    <div className="muted small-text">{item.author} · {item.timestamp}</div>
+                                </div>
+                                <div className="button-row compact-row">
+                                    <span className="badge">{downloadStates[item.attachment.url] ?? "remote"}</span>
+                                    <button
+                                        onClick={() =>
+                                            runAction("download attachment", async () => {
+                                                const url = await cacheAttachment(item.attachment)
+                                                window.open(url, "_blank", "noopener,noreferrer")
+                                            })
+                                        }
+                                        type="button"
+                                    >
+                                        {cachedAttachments[item.attachment.url] ? "Open" : "Cache"}
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </section>
             </aside>
 
