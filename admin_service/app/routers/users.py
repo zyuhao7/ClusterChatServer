@@ -3,6 +3,7 @@ import shutil
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from admin_service.app.core.config import settings
 from admin_service.app.db.database import get_db
@@ -10,6 +11,11 @@ from admin_service.app.models import User
 
 router = APIRouter(tags=["users"])
 AVATAR_ROOT = settings.media_root / "avatars"
+
+
+class UserProfileUpdate(BaseModel):
+    bio: str = ""
+    location: str = ""
 
 
 def avatar_url_for(row: User) -> str:
@@ -36,6 +42,8 @@ def list_users(
             "name": row.name,
             "state": row.state,
             "avatar_url": avatar_url_for(row),
+            "bio": row.bio,
+            "location": row.location,
         }
         for row in rows
     ]
@@ -52,6 +60,28 @@ def get_user(user_id: int, db: Session = Depends(get_db)) -> dict:
         "name": row.name,
         "state": row.state,
         "avatar_url": avatar_url_for(row),
+        "bio": row.bio,
+        "location": row.location,
+    }
+
+
+@router.put("/users/{user_id}")
+def update_user_profile(user_id: int, payload: UserProfileUpdate, db: Session = Depends(get_db)) -> dict:
+    row = db.query(User).filter(User.id == user_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="user not found")
+
+    row.bio = payload.bio
+    row.location = payload.location
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "name": row.name,
+        "state": row.state,
+        "avatar_url": avatar_url_for(row),
+        "bio": row.bio,
+        "location": row.location,
     }
 
 
@@ -88,6 +118,8 @@ def upload_avatar(
         "name": row.name,
         "state": row.state,
         "avatar_url": avatar_url_for(row),
+        "bio": row.bio,
+        "location": row.location,
     }
 
 

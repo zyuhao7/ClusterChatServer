@@ -43,6 +43,7 @@ ChatService::ChatService()
     _msgHandlerMap.insert({SET_USER_STATE_MSG, std::bind(&ChatService::setUserState, this, _1, _2, _3)});
     _msgHandlerMap.insert({SET_NICKNAME_MSG, std::bind(&ChatService::setNickname, this, _1, _2, _3)});
     _msgHandlerMap.insert({SET_GROUP_ANNOUNCEMENT_MSG, std::bind(&ChatService::setGroupAnnouncement, this, _1, _2, _3)});
+    _msgHandlerMap.insert({SET_GROUP_PROFILE_MSG, std::bind(&ChatService::setGroupProfile, this, _1, _2, _3)});
     _msgHandlerMap.insert({MUTE_GROUP_MEMBER_MSG, std::bind(&ChatService::muteGroupMember, this, _1, _2, _3)});
     _msgHandlerMap.insert({KICK_GROUP_MEMBER_MSG, std::bind(&ChatService::kickGroupMember, this, _1, _2, _3)});
 
@@ -1052,6 +1053,38 @@ void ChatService::setGroupAnnouncement(const TcpConnectionPtr &conn, json &js, T
     extra["groupid"] = groupid;
     extra["announcement"] = announcement;
     sendAck(conn, SET_GROUP_ANNOUNCEMENT_MSG_ACK, request_id, ERR_OK, "", extra);
+}
+
+void ChatService::setGroupProfile(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int operator_id = js["id"].get<int>();
+    int groupid = js["groupid"].get<int>();
+    string groupname = js.value("groupname", "");
+    string groupdesc = js.value("groupdesc", "");
+    if (groupname.empty())
+    {
+        sendAck(conn, SET_GROUP_PROFILE_MSG_ACK, request_id, ERR_GROUP_NAME_EMPTY, "群名称不能为空");
+        return;
+    }
+
+    string operator_role = _groupModal.QueryUserRole(operator_id, groupid);
+    if (operator_role != "creator" && operator_role != "admin")
+    {
+        sendAck(conn, SET_GROUP_PROFILE_MSG_ACK, request_id, ERR_GROUP_ROLE_PERMISSION_DENIED, "仅群主或管理员可修改群资料");
+        return;
+    }
+    if (!_groupModal.UpdateProfile(groupid, groupname, groupdesc))
+    {
+        sendAck(conn, SET_GROUP_PROFILE_MSG_ACK, request_id, ERR_GROUP_PROFILE_UPDATE_FAILED, "更新群资料失败");
+        return;
+    }
+
+    json extra;
+    extra["groupid"] = groupid;
+    extra["groupname"] = groupname;
+    extra["groupdesc"] = groupdesc;
+    sendAck(conn, SET_GROUP_PROFILE_MSG_ACK, request_id, ERR_OK, "", extra);
 }
 
 void ChatService::muteGroupMember(const TcpConnectionPtr &conn, json &js, Timestamp time)

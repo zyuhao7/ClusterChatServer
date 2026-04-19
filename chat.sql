@@ -6,7 +6,9 @@ CREATE TABLE IF NOT EXISTS user (
     name VARCHAR(50) NOT NULL,
     password VARCHAR(255) NOT NULL,
     state VARCHAR(20) NOT NULL DEFAULT 'offline',
-    avatar_path VARCHAR(255) NOT NULL DEFAULT ''
+    avatar_path VARCHAR(255) NOT NULL DEFAULT '',
+    bio VARCHAR(255) NOT NULL DEFAULT '',
+    location VARCHAR(64) NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS friend (

@@ -59,8 +59,10 @@ interface SessionStoreState {
     updateFriendProfile: (userId: number, avatarUrl: string) => void
     upsertGroupSession: (groupId: number, name: string, desc: string) => void
     updateGroupAnnouncement: (groupId: number, announcement: string) => void
+    updateGroupProfile: (groupId: number, name: string, desc: string) => void
     updateGroupMemberMute: (groupId: number, targetId: number, mutedUntil: string) => void
     removeGroupMember: (groupId: number, targetId: number) => void
+    restorePinnedSessions: (sessionIds: string[]) => void
     appendLocalMessage: (sessionId: string, author: string, body: string, timestamp: string, messageId?: number) => void
     resetSession: () => void
 }
@@ -125,6 +127,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                 ? state.pinnedSessionIds.filter((item) => item !== sessionId)
                 : [...state.pinnedSessionIds, sessionId],
         })),
+    restorePinnedSessions: (sessionIds) => set(() => ({ pinnedSessionIds: sessionIds })),
     bootstrapFromLogin: (payload) =>
         set(() => {
             const sessions = buildSessionsFromLogin(payload)
@@ -329,6 +332,24 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
             sessions: updateSessionMeta(state.sessions, groupSessionId(groupId), (session) => ({
                 ...session,
                 subtitle: announcement,
+            })),
+        })),
+    updateGroupProfile: (groupId, name, desc) =>
+        set((state) => ({
+            groups: state.groups[groupId]
+                ? {
+                    ...state.groups,
+                    [groupId]: {
+                        ...state.groups[groupId],
+                        groupname: name,
+                        groupdesc: desc,
+                    },
+                }
+                : state.groups,
+            sessions: updateSessionMeta(state.sessions, groupSessionId(groupId), (session) => ({
+                ...session,
+                title: name,
+                subtitle: state.groups[groupId]?.announcement || desc,
             })),
         })),
     updateGroupMemberMute: (groupId, targetId, mutedUntil) =>

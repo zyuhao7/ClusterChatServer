@@ -202,6 +202,20 @@ bool GroupModal::UpdateAnnouncement(int groupid, const string &announcement)
     return mysql.update(sql);
 }
 
+bool GroupModal::UpdateProfile(int groupid, const string &name, const string &desc)
+{
+    char sql[1024] = {0};
+    sprintf(sql,
+            "update allgroup set groupname = '%s', groupdesc = '%s' where id = %d",
+            name.c_str(), desc.c_str(), groupid);
+    MySQL mysql;
+    if (!mysql.connect())
+    {
+        return false;
+    }
+    return mysql.update(sql);
+}
+
 bool GroupModal::UpdateMutedUntil(int userid, int groupid, const string &muted_until)
 {
     char sql[1024] = {0};

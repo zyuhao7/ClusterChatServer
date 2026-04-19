@@ -16,6 +16,8 @@ class User(Base):
     password: Mapped[str] = mapped_column(String(255), nullable=False)
     state: Mapped[str] = mapped_column(String(20), nullable=False, default="offline")
     avatar_path: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    bio: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    location: Mapped[str] = mapped_column(String(64), nullable=False, default="")
 
 
 class Friend(Base):

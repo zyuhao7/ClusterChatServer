@@ -54,6 +54,11 @@ export async function setGroupAnnouncement(groupId: number, announcement: string
     return assertOk(payload)
 }
 
+export async function setGroupProfile(groupId: number, groupName: string, groupDesc: string) {
+    const payload = await invoke<BridgeResponse>("set_group_profile", { groupId, groupName, groupDesc })
+    return assertOk(payload)
+}
+
 export async function muteGroupMember(groupId: number, targetId: number, minutes: number) {
     const payload = await invoke<BridgeResponse>("mute_group_member", { groupId, targetId, minutes })
     return assertOk(payload)
@@ -122,6 +127,21 @@ export async function fetchUserProfile(host: string, userId: number) {
     const response = await fetch(`${adminBaseUrl(host)}/api/v1/users/${userId}`)
     if (!response.ok) {
         throw new Error(`Failed to load user profile ${userId}`)
+    }
+    return response.json() as Promise<UserProfile>
+}
+
+export async function updateUserProfile(host: string, userId: number, bio: string, location: string) {
+    const response = await fetch(`${adminBaseUrl(host)}/api/v1/users/${userId}`, {
+        method: "PUT",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ bio, location }),
+    })
+    if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || `Failed to update user profile ${userId}`)
     }
     return response.json() as Promise<UserProfile>
 }

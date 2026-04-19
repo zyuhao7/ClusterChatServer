@@ -174,6 +174,23 @@ def test_upload_attachment_returns_media_url(client: TestClient) -> None:
     assert data["url"].startswith("/media/attachments/")
 
 
+def test_update_user_profile_fields(client: TestClient) -> None:
+    resp = client.put(
+        "/api/v1/users/1",
+        json={"bio": "backend engineer", "location": "Hangzhou"},
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["bio"] == "backend engineer"
+    assert payload["location"] == "Hangzhou"
+
+    detail_resp = client.get("/api/v1/users/1")
+    assert detail_resp.status_code == 200
+    detail_payload = detail_resp.json()
+    assert detail_payload["bio"] == "backend engineer"
+    assert detail_payload["location"] == "Hangzhou"
+
+
 def test_ban_user_requires_admin_token(client: TestClient) -> None:
     resp = client.post("/api/v1/admin/users/1/ban")
     assert resp.status_code == 401

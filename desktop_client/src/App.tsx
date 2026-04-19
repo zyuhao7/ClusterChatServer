@@ -16,11 +16,13 @@ import {
     sendGroupMessage,
     sessionInfo,
     setGroupAnnouncement,
+    setGroupProfile,
     setNickname,
     setPresence,
     subscribeProtocolEvents,
     uploadAttachmentWithProgress,
     uploadAvatar,
+    updateUserProfile,
 } from "./lib/bridge"
 import { createProtocolSummary, directSessionId, groupSessionId, type AttachmentPayload } from "./lib/protocol"
 import { isTauriRuntime } from "./lib/tauri"
@@ -80,10 +82,14 @@ export default function App() {
     const [newGroupName, setNewGroupName] = useState("")
     const [newGroupDesc, setNewGroupDesc] = useState("")
     const [joinGroupId, setJoinGroupId] = useState("")
+    const [groupProfileName, setGroupProfileName] = useState("")
+    const [groupProfileDesc, setGroupProfileDesc] = useState("")
     const [announcementDraft, setAnnouncementDraft] = useState("")
     const [muteTargetId, setMuteTargetId] = useState("")
     const [muteMinutes, setMuteMinutes] = useState("10")
     const [kickTargetId, setKickTargetId] = useState("")
+    const [bioDraft, setBioDraft] = useState("")
+    const [locationDraft, setLocationDraft] = useState("")
     const [avatarFile, setAvatarFile] = useState<File | null>(null)
     const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("")
     const [avatarFileName, setAvatarFileName] = useState("")
@@ -92,6 +98,7 @@ export default function App() {
     const [lightboxAttachment, setLightboxAttachment] = useState<AttachmentPayload | null>(null)
     const [cachedAttachments, setCachedAttachments] = useState<Record<string, string>>({})
     const [downloadStates, setDownloadStates] = useState<Record<string, string>>({})
+    const [downloadHistory, setDownloadHistory] = useState<Array<{ url: string; name: string; timestamp: string }>>([])
 
     const protocolSummary = useMemo(() => createProtocolSummary(), [])
     const sortedSessions = useMemo(() => {
@@ -114,8 +121,9 @@ export default function App() {
     }, [sessionFilter, store.pinnedSessionIds, store.sessions])
     const sessionGroups = useMemo(() => ({
         pinned: sortedSessions.filter((session) => store.pinnedSessionIds.includes(session.sessionId)),
-        direct: sortedSessions.filter((session) => session.kind === "direct" && !store.pinnedSessionIds.includes(session.sessionId)),
-        group: sortedSessions.filter((session) => session.kind === "group" && !store.pinnedSessionIds.includes(session.sessionId)),
+        unread: sortedSessions.filter((session) => session.unreadCount > 0 && !store.pinnedSessionIds.includes(session.sessionId)),
+        direct: sortedSessions.filter((session) => session.kind === "direct" && session.unreadCount === 0 && !store.pinnedSessionIds.includes(session.sessionId)),
+        group: sortedSessions.filter((session) => session.kind === "group" && session.unreadCount === 0 && !store.pinnedSessionIds.includes(session.sessionId)),
     }), [sortedSessions, store.pinnedSessionIds])
     const recentContacts = useMemo(
         () => sortedSessions.filter((session) => session.kind === "direct").slice(0, 5),
@@ -241,8 +249,37 @@ export default function App() {
     useEffect(() => {
         if (groupProfile) {
             setAnnouncementDraft(groupProfile.announcement ?? "")
+            setGroupProfileName(groupProfile.groupname)
+            setGroupProfileDesc(groupProfile.groupdesc)
         }
-    }, [groupProfile?.id, groupProfile?.announcement])
+    }, [groupProfile?.id, groupProfile?.announcement, groupProfile?.groupdesc, groupProfile?.groupname])
+
+    useEffect(() => {
+        const pinned = localStorage.getItem("clusterchat.desktop.pinnedSessions")
+        const downloads = localStorage.getItem("clusterchat.desktop.downloadHistory")
+        if (pinned) {
+            try {
+                store.restorePinnedSessions(JSON.parse(pinned) as string[])
+            } catch {
+                // ignore invalid local state
+            }
+        }
+        if (downloads) {
+            try {
+                setDownloadHistory(JSON.parse(downloads) as Array<{ url: string; name: string; timestamp: string }>)
+            } catch {
+                // ignore invalid local state
+            }
+        }
+    }, [])
+
+    useEffect(() => {
+        localStorage.setItem("clusterchat.desktop.pinnedSessions", JSON.stringify(store.pinnedSessionIds))
+    }, [store.pinnedSessionIds])
+
+    useEffect(() => {
+        localStorage.setItem("clusterchat.desktop.downloadHistory", JSON.stringify(downloadHistory))
+    }, [downloadHistory])
 
     useEffect(() => {
         if (!store.loggedInUserId) {
@@ -253,6 +290,8 @@ export default function App() {
             .then((profile) => {
                 const avatarUrl = profile.avatar_url ? `http://${store.host}:8010${profile.avatar_url}` : ""
                 store.setLoggedInUserAvatarUrl(avatarUrl)
+                setBioDraft(profile.bio ?? "")
+                setLocationDraft(profile.location ?? "")
             })
             .catch(() => undefined)
     }, [store.host, store.loggedInUserId])
@@ -349,6 +388,17 @@ export default function App() {
         const objectUrl = URL.createObjectURL(blob)
         setCachedAttachments((current) => ({ ...current, [attachment.url]: objectUrl }))
         setDownloadStates((current) => ({ ...current, [attachment.url]: "cached" }))
+        setDownloadHistory((current) => {
+            const next = [
+                {
+                    url: attachment.url,
+                    name: attachment.name,
+                    timestamp: new Date().toISOString(),
+                },
+                ...current.filter((item) => item.url !== attachment.url),
+            ]
+            return next.slice(0, 20)
+        })
         return objectUrl
     }
 
@@ -476,6 +526,7 @@ export default function App() {
                     </label>
                     {sortedSessions.length === 0 ? <p className="muted">No sessions yet.</p> : null}
                     {renderSessionSection("Pinned", sessionGroups.pinned)}
+                    {renderSessionSection("Unread", sessionGroups.unread)}
                     {renderSessionSection("Direct", sessionGroups.direct)}
                     {renderSessionSection("Groups", sessionGroups.group)}
                 </section>
@@ -682,6 +733,29 @@ export default function App() {
                         store.setLastResponse(JSON.stringify(response, null, 2))
                     })} type="button">Update Nickname</button>
                     <label className="field">
+                        <span>Bio</span>
+                        <textarea value={bioDraft} onChange={(event) => setBioDraft(event.target.value)} />
+                    </label>
+                    <label className="field">
+                        <span>Location</span>
+                        <input value={locationDraft} onChange={(event) => setLocationDraft(event.target.value)} />
+                    </label>
+                    <button
+                        disabled={!store.loggedInUserId}
+                        onClick={() =>
+                            runAction("save profile", async () => {
+                                if (!store.loggedInUserId) {
+                                    return
+                                }
+                                const profile = await updateUserProfile(store.host, store.loggedInUserId, bioDraft, locationDraft)
+                                store.setLastResponse(JSON.stringify(profile, null, 2))
+                            })
+                        }
+                        type="button"
+                    >
+                        Save Profile Details
+                    </button>
+                    <label className="field">
                         <span>Avatar draft</span>
                         <input type="file" accept="image/*" onChange={handleAvatarChange} />
                     </label>
@@ -798,6 +872,26 @@ export default function App() {
                     <section className="card-section">
                         <p className="eyebrow">Group Moderation</p>
                         <label className="field">
+                            <span>Group name</span>
+                            <input value={groupProfileName} onChange={(event) => setGroupProfileName(event.target.value)} />
+                        </label>
+                        <label className="field">
+                            <span>Group description</span>
+                            <textarea value={groupProfileDesc} onChange={(event) => setGroupProfileDesc(event.target.value)} />
+                        </label>
+                        <button
+                            onClick={() =>
+                                runAction("update group profile", async () => {
+                                    const response = await setGroupProfile(groupProfile.id, groupProfileName, groupProfileDesc)
+                                    store.updateGroupProfile(groupProfile.id, groupProfileName, groupProfileDesc)
+                                    store.setLastResponse(JSON.stringify(response, null, 2))
+                                })
+                            }
+                            type="button"
+                        >
+                            Save Group Profile
+                        </button>
+                        <label className="field">
                             <span>Announcement</span>
                             <textarea value={announcementDraft} onChange={(event) => setAnnouncementDraft(event.target.value)} />
                         </label>
@@ -905,7 +999,7 @@ export default function App() {
                 <section className="card-section">
                     <p className="eyebrow">Download Manager</p>
                     <div className="download-list">
-                        {attachmentLibrary.length === 0 ? <p className="muted">No attachment history yet.</p> : null}
+                        {attachmentLibrary.length === 0 && downloadHistory.length === 0 ? <p className="muted">No attachment history yet.</p> : null}
                         {attachmentLibrary.slice(0, 8).map((item) => (
                             <div key={item.id} className="download-item">
                                 <div>
@@ -928,6 +1022,17 @@ export default function App() {
                                 </div>
                             </div>
                         ))}
+                        {attachmentLibrary.length === 0
+                            ? downloadHistory.slice(0, 8).map((item) => (
+                                <div key={item.url} className="download-item">
+                                    <div>
+                                        <strong>{item.name}</strong>
+                                        <div className="muted small-text">{item.timestamp}</div>
+                                    </div>
+                                    <span className="badge">history</span>
+                                </div>
+                            ))
+                            : null}
                     </div>
                 </section>
             </aside>

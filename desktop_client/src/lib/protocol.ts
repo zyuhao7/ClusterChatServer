@@ -20,6 +20,8 @@ export interface UserProfile {
     name: string
     state: PresenceState | string
     avatar_url?: string
+    bio?: string
+    location?: string
 }
 
 export interface HistoryEntry {

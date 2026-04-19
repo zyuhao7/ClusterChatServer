@@ -23,6 +23,7 @@ const SET_NICKNAME_MSG: i64 = 36;
 const SET_GROUP_ANNOUNCEMENT_MSG: i64 = 38;
 const MUTE_GROUP_MEMBER_MSG: i64 = 40;
 const KICK_GROUP_MEMBER_MSG: i64 = 42;
+const SET_GROUP_PROFILE_MSG: i64 = 45;
 const ONE_CHAT_MSG: i64 = 7;
 const GROUP_CHAT_MSG: i64 = 15;
 const RECALL_NOTIFY_MSG: i64 = 25;
@@ -322,6 +323,22 @@ fn set_group_announcement(state: tauri::State<AppState>, group_id: i64, announce
 }
 
 #[tauri::command]
+fn set_group_profile(state: tauri::State<AppState>, group_id: i64, group_name: String, group_desc: String) -> Result<Value, String> {
+    let guard = state.session.lock().map_err(|err| err.to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let payload = json!({
+        "version": CHAT_PROTOCOL_VERSION,
+        "msgid": SET_GROUP_PROFILE_MSG,
+        "request_id": next_request_id(&state, "desktop-group-profile"),
+        "id": session.user_id,
+        "groupid": group_id,
+        "groupname": group_name,
+        "groupdesc": group_desc,
+    });
+    send_request(session, payload)
+}
+
+#[tauri::command]
 fn mute_group_member(state: tauri::State<AppState>, group_id: i64, target_id: i64, minutes: i64) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
     let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
@@ -479,6 +496,7 @@ fn main() {
             create_group,
             join_group,
             set_group_announcement,
+            set_group_profile,
             mute_group_member,
             kick_group_member,
             send_direct_message,
