@@ -110,6 +110,24 @@ void ChatService::unsubscribeUserChannel(int userid)
     }
 }
 
+void ChatService::notifyFriendStateChange(int userid, const string &name, const string &state)
+{
+    json notify;
+    notify["version"] = CHAT_PROTOCOL_VERSION;
+    notify["msgid"] = FRIEND_STATE_NOTIFY_MSG;
+    notify["request_id"] = "";
+    notify["user_id"] = userid;
+    notify["name"] = name;
+    notify["state"] = state;
+
+    vector<int> friends = _friendModal.queryIds(userid);
+    string payload = notify.dump();
+    for (int friend_id : friends)
+    {
+        _redis.Publish(friend_id, payload);
+    }
+}
+
 // 服务异常, 重置用户状态
 void ChatService::reset()
 {
@@ -194,6 +212,8 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                 lock_guard<std::mutex> lock(_mtx);
                 _subscribedUsers.insert(id);
             }
+
+            notifyFriendStateChange(id, user.GetName(), "online");
 
             json extra;
             extra["id"] = user.GetId();
@@ -315,6 +335,11 @@ void ChatService::loginout(const TcpConnectionPtr &conn, json &js, Timestamp tim
     // 更新用户状态信息
     User user(userid, "", "", "offline");
     _userModal.updateState(user);
+    User full_user = _userModal.query(userid);
+    if (full_user.GetId() == userid)
+    {
+        notifyFriendStateChange(userid, full_user.GetName(), "offline");
+    }
     sendAck(conn, LOGINOUT_MSG_ACK, request_id, ERR_OK, "");
 }
 void ChatService::clientCloseException(const TcpConnectionPtr &conn)
@@ -338,9 +363,14 @@ void ChatService::clientCloseException(const TcpConnectionPtr &conn)
     // 更新用户状态信息
     if (user.GetId() != -1)
     {
+        User full_user = _userModal.query(user.GetId());
         unsubscribeUserChannel(user.GetId());
         user.SetState("offline");
         _userModal.updateState(user);
+        if (full_user.GetId() == user.GetId())
+        {
+            notifyFriendStateChange(user.GetId(), full_user.GetName(), "offline");
+        }
     }
 }
 
@@ -950,6 +980,7 @@ void ChatService::setUserState(const TcpConnectionPtr &conn, json &js, Timestamp
 
     json extra;
     extra["state"] = state;
+    notifyFriendStateChange(userid, user.GetName(), state);
     sendAck(conn, SET_USER_STATE_MSG_ACK, request_id, ERR_OK, "", extra);
 }
 

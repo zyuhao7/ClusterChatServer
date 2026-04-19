@@ -4,6 +4,7 @@ import {
     buildBootstrapTimeline,
     buildSessionsFromLogin,
     directSessionId,
+    FRIEND_STATE_NOTIFY_MSG,
     groupSessionId,
     parseFriends,
     parseGroups,
@@ -35,6 +36,7 @@ interface SessionStoreState {
     historyOrder: "asc" | "desc"
     selectedSessionId: string | null
     composerText: string
+    pinnedSessionIds: string[]
     sessions: SessionListItem[]
     timelines: Record<string, TimelineItem[]>
     searchResults: SearchUserEntry[]
@@ -48,6 +50,7 @@ interface SessionStoreState {
     setSearchResults: (results: SearchUserEntry[]) => void
     setLastResponse: (payload: string) => void
     setSelectedSessionId: (sessionId: string | null) => void
+    togglePinnedSession: (sessionId: string) => void
     bootstrapFromLogin: (payload: LoginResponsePayload) => void
     replaceHistory: (sessionId: string, entries: HistoryEntry[]) => void
     applyProtocolEvent: (event: ProtocolPushEvent) => void
@@ -75,6 +78,7 @@ const initialState = {
     historyOrder: "desc" as const,
     selectedSessionId: null,
     composerText: "",
+    pinnedSessionIds: [],
     sessions: [] as SessionListItem[],
     timelines: {} as Record<string, TimelineItem[]>,
     searchResults: [] as SearchUserEntry[],
@@ -115,6 +119,12 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                 ? updateSessionMeta(state.sessions, selectedSessionId, (session) => ({ ...session, unreadCount: 0 }))
                 : state.sessions,
         })),
+    togglePinnedSession: (sessionId) =>
+        set((state) => ({
+            pinnedSessionIds: state.pinnedSessionIds.includes(sessionId)
+                ? state.pinnedSessionIds.filter((item) => item !== sessionId)
+                : [...state.pinnedSessionIds, sessionId],
+        })),
     bootstrapFromLogin: (payload) =>
         set(() => {
             const sessions = buildSessionsFromLogin(payload)
@@ -149,6 +159,28 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
         set((state) => {
             const sessionId = resolveSessionId(event)
             if (!sessionId) {
+                if (event.msgid === FRIEND_STATE_NOTIFY_MSG && event.user_id) {
+                    const friendId = event.user_id
+                    const nextFriends = state.friends[friendId]
+                        ? {
+                            ...state.friends,
+                            [friendId]: {
+                                ...state.friends[friendId],
+                                state: event.state ?? state.friends[friendId].state,
+                            },
+                        }
+                        : state.friends
+                    const directId = directSessionId(friendId)
+                    const nextSessions = updateSessionMeta(state.sessions, directId, (session) => ({
+                        ...session,
+                        presence: event.state ?? session.presence,
+                        subtitle: `friend · ${event.state ?? session.presence}`,
+                    }))
+                    return {
+                        friends: nextFriends,
+                        sessions: nextSessions,
+                    }
+                }
                 if (event.msgid === RECALL_NOTIFY_MSG && event.message_id) {
                     const timelines = Object.fromEntries(
                         Object.entries(state.timelines).map(([key, items]) => [

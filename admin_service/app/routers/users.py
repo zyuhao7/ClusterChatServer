@@ -89,3 +89,27 @@ def upload_avatar(
         "state": row.state,
         "avatar_url": avatar_url_for(row),
     }
+
+
+@router.post("/uploads/attachments")
+def upload_attachment(attachment: UploadFile = File(...)) -> dict:
+    if not attachment.filename:
+        raise HTTPException(status_code=400, detail="attachment filename is required")
+
+    attachments_root = settings.media_root / "attachments"
+    attachments_root.mkdir(parents=True, exist_ok=True)
+    suffix = Path(attachment.filename).suffix or ""
+    safe_name = Path(attachment.filename).stem.replace(" ", "_")
+    relative_path = Path("attachments") / f"{safe_name}-{attachment.size or 0}{suffix.lower()}"
+    target_path = settings.media_root / relative_path
+    with target_path.open("wb") as file_obj:
+        shutil.copyfileobj(attachment.file, file_obj)
+
+    kind = "image" if attachment.content_type and attachment.content_type.startswith("image/") else "file"
+    return {
+        "name": attachment.filename,
+        "kind": kind,
+        "mime": attachment.content_type or "application/octet-stream",
+        "size": attachment.size or 0,
+        "url": f"/media/{relative_path.as_posix()}",
+    }

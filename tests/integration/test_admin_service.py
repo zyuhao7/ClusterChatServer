@@ -161,6 +161,19 @@ def test_upload_avatar_updates_user_profile(client: TestClient, tmp_path: Path) 
     assert avatar_path.exists()
 
 
+def test_upload_attachment_returns_media_url(client: TestClient) -> None:
+    payload = b"hello attachment"
+    resp = client.post(
+        "/api/v1/uploads/attachments",
+        files={"attachment": ("hello.txt", payload, "text/plain")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["kind"] == "file"
+    assert data["name"] == "hello.txt"
+    assert data["url"].startswith("/media/attachments/")
+
+
 def test_ban_user_requires_admin_token(client: TestClient) -> None:
     resp = client.post("/api/v1/admin/users/1/ban")
     assert resp.status_code == 401

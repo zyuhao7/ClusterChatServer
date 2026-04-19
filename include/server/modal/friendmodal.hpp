@@ -13,6 +13,8 @@ public:
     bool isFriend(int userid, int friendid);
     // 返回好友列表
     vector<User> query(int userid);
+    // 返回好友id列表
+    vector<int> queryIds(int userid);
 };
 
 #endif

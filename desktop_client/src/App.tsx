@@ -19,6 +19,7 @@ import {
     setNickname,
     setPresence,
     subscribeProtocolEvents,
+    uploadAttachment,
     uploadAvatar,
 } from "./lib/bridge"
 import { createProtocolSummary, directSessionId, groupSessionId } from "./lib/protocol"
@@ -38,9 +39,21 @@ export default function App() {
     const [avatarFile, setAvatarFile] = useState<File | null>(null)
     const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("")
     const [avatarFileName, setAvatarFileName] = useState("")
+    const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
+    const [attachmentName, setAttachmentName] = useState("")
 
     const protocolSummary = useMemo(() => createProtocolSummary(), [])
-    const selectedSession = store.sessions.find((session) => session.sessionId === store.selectedSessionId) ?? null
+    const sortedSessions = useMemo(() => {
+        return [...store.sessions].sort((a, b) => {
+            const aPinned = store.pinnedSessionIds.includes(a.sessionId)
+            const bPinned = store.pinnedSessionIds.includes(b.sessionId)
+            if (aPinned !== bPinned) {
+                return aPinned ? -1 : 1
+            }
+            return b.latestTimestamp.localeCompare(a.latestTimestamp)
+        })
+    }, [store.pinnedSessionIds, store.sessions])
+    const selectedSession = sortedSessions.find((session) => session.sessionId === store.selectedSessionId) ?? null
     const currentTimeline = selectedSession ? store.timelines[selectedSession.sessionId] ?? [] : []
     const directProfile = selectedSession?.kind === "direct" ? store.friends[selectedSession.rawId] ?? null : null
     const groupProfile = selectedSession?.kind === "group" ? store.groups[selectedSession.rawId] ?? null : null
@@ -129,6 +142,16 @@ export default function App() {
         store.setLastResponse(`Selected avatar draft: ${file.name}`)
     }
 
+    function handleAttachmentChange(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0]
+        if (!file) {
+            return
+        }
+        setAttachmentFile(file)
+        setAttachmentName(file.name)
+        store.setLastResponse(`Selected attachment: ${file.name}`)
+    }
+
     return (
         <div className="app-shell">
             <aside className="panel sidebar">
@@ -198,8 +221,8 @@ export default function App() {
                 <section>
                     <h2>Sessions</h2>
                     <div className="session-list">
-                        {store.sessions.length === 0 ? <p className="muted">No sessions yet.</p> : null}
-                        {store.sessions.map((session) => (
+                        {sortedSessions.length === 0 ? <p className="muted">No sessions yet.</p> : null}
+                        {sortedSessions.map((session) => (
                             <button
                                 key={session.sessionId}
                                 className={store.selectedSessionId === session.sessionId ? "session session-active" : "session"}
@@ -208,7 +231,10 @@ export default function App() {
                             >
                                 <div className="session-head-row">
                                     <span className="session-title">{session.title}</span>
-                                    {session.unreadCount > 0 ? <span className="badge badge-unread">{session.unreadCount}</span> : null}
+                                    <div className="button-row compact-row">
+                                        {store.pinnedSessionIds.includes(session.sessionId) ? <span className="badge">Pinned</span> : null}
+                                        {session.unreadCount > 0 ? <span className="badge badge-unread">{session.unreadCount}</span> : null}
+                                    </div>
                                 </div>
                                 <span className="session-meta">{session.kind} · {session.subtitle}</span>
                                 {session.latestMessage ? <span className="session-preview">{session.latestMessage}</span> : null}
@@ -267,7 +293,18 @@ export default function App() {
                                 <strong>{entry.author}</strong>
                                 <span>{entry.timestamp}</span>
                             </div>
-                            <p>{entry.body}</p>
+                            {entry.attachment ? (
+                                <div className="attachment-card">
+                                    <strong>{entry.attachment.name}</strong>
+                                    <span>{entry.attachment.mime}</span>
+                                    {entry.attachment.kind === "image" ? (
+                                        <img alt={entry.attachment.name} className="attachment-image" src={entry.attachment.url} />
+                                    ) : null}
+                                    <a href={entry.attachment.url} rel="noreferrer" target="_blank">Open attachment</a>
+                                </div>
+                            ) : (
+                                <p>{entry.body}</p>
+                            )}
                         </article>
                     ))}
                 </section>
@@ -280,14 +317,22 @@ export default function App() {
                         onChange={(event) => store.setField("composerText", event.target.value)}
                     />
                     <div className="button-row">
+                        <label className="button-like">
+                            <span>Choose Attachment</span>
+                            <input className="hidden-input" type="file" onChange={handleAttachmentChange} />
+                        </label>
                         <button
-                            disabled={!selectedSession || !store.composerText.trim()}
+                            disabled={!selectedSession || (!store.composerText.trim() && !attachmentFile)}
                             onClick={() =>
                                 runAction("send message", async () => {
                                     if (!selectedSession) {
                                         return
                                     }
-                                    const text = store.composerText.trim()
+                                    let text = store.composerText.trim()
+                                    if (attachmentFile) {
+                                        const uploaded = await uploadAttachment(store.host, attachmentFile)
+                                        text = JSON.stringify(uploaded)
+                                    }
                                     const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19)
                                     if (selectedSession.kind === "direct") {
                                         const response = await sendDirectMessage(selectedSession.rawId, text)
@@ -298,6 +343,8 @@ export default function App() {
                                         store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
                                         store.setLastResponse(JSON.stringify(response, null, 2))
                                     }
+                                    setAttachmentFile(null)
+                                    setAttachmentName("")
                                 })
                             }
                             type="button"
@@ -306,6 +353,7 @@ export default function App() {
                         </button>
                         <button onClick={() => store.setField("composerText", "")} type="button">Clear</button>
                     </div>
+                    {attachmentName ? <p className="muted">Attachment ready: {attachmentName}</p> : null}
                 </section>
             </main>
 
@@ -367,6 +415,11 @@ export default function App() {
                             {directProfile.avatar_url ? <img alt="friend avatar" className="avatar-preview avatar-preview-small" src={directProfile.avatar_url} /> : null}
                             <span>ID: {directProfile.id}</span>
                             <span>State: {directProfile.state}</span>
+                            {selectedSession ? (
+                                <button onClick={() => store.togglePinnedSession(selectedSession.sessionId)} type="button">
+                                    {store.pinnedSessionIds.includes(selectedSession.sessionId) ? "Unpin Session" : "Pin Session"}
+                                </button>
+                            ) : null}
                             <button onClick={() => runAction("add friend", async () => {
                                 const response = await addFriend(directProfile.id)
                                 store.markFriend({
@@ -388,6 +441,11 @@ export default function App() {
                             <span>{groupProfile.groupdesc}</span>
                             {groupProfile.announcement ? <span>Announcement: {groupProfile.announcement}</span> : null}
                             <span>Members: {groupProfile.users.length}</span>
+                            {selectedSession ? (
+                                <button onClick={() => store.togglePinnedSession(selectedSession.sessionId)} type="button">
+                                    {store.pinnedSessionIds.includes(selectedSession.sessionId) ? "Unpin Session" : "Pin Session"}
+                                </button>
+                            ) : null}
                         </div>
                     ) : null}
                 </section>

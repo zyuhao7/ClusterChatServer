@@ -75,6 +75,7 @@ private:
   void sendAck(const TcpConnectionPtr &conn, int ack_msgid, const string &request_id,
                int err_no, const string &err_msg, const json &extra = json::object()) const;
   void unsubscribeUserChannel(int userid);
+  void notifyFriendStateChange(int userid, const string &name, const string &state);
   // 存储消息id和其对应的业务处理方法
   unordered_map<int, MsgHandler> _msgHandlerMap;
   // 存储在线用户的通信连接

@@ -52,6 +52,7 @@ enum EnMsgType
     MUTE_GROUP_MEMBER_MSG_ACK, // 禁言群成员响应
     KICK_GROUP_MEMBER_MSG, // 踢出群成员
     KICK_GROUP_MEMBER_MSG_ACK, // 踢出群成员响应
+    FRIEND_STATE_NOTIFY_MSG, // 好友状态变化通知
 
 };
 

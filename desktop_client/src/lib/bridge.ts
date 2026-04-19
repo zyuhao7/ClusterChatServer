@@ -139,3 +139,17 @@ export async function uploadAvatar(host: string, userId: number, file: File) {
     }
     return response.json() as Promise<UserProfile>
 }
+
+export async function uploadAttachment(host: string, file: File) {
+    const form = new FormData()
+    form.append("attachment", file)
+    const response = await fetch(`${adminBaseUrl(host)}/api/v1/uploads/attachments`, {
+        method: "POST",
+        body: form,
+    })
+    if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || "Attachment upload failed")
+    }
+    return response.json() as Promise<{ kind: "image" | "file"; url: string; name: string; mime: string; size: number }>
+}

@@ -26,6 +26,7 @@ const KICK_GROUP_MEMBER_MSG: i64 = 42;
 const ONE_CHAT_MSG: i64 = 7;
 const GROUP_CHAT_MSG: i64 = 15;
 const RECALL_NOTIFY_MSG: i64 = 25;
+const FRIEND_STATE_NOTIFY_MSG: i64 = 44;
 
 type PendingMap = Arc<Mutex<HashMap<String, mpsc::Sender<Value>>>>;
 
@@ -120,7 +121,7 @@ fn spawn_listener(app: tauri::AppHandle, mut reader: TcpStream, pending: Pending
         }
 
         let msgid = payload.get("msgid").and_then(Value::as_i64).unwrap_or_default();
-        if msgid == ONE_CHAT_MSG || msgid == GROUP_CHAT_MSG || msgid == RECALL_NOTIFY_MSG {
+        if msgid == ONE_CHAT_MSG || msgid == GROUP_CHAT_MSG || msgid == RECALL_NOTIFY_MSG || msgid == FRIEND_STATE_NOTIFY_MSG {
             let _ = app.emit("protocol-event", payload);
         }
     });

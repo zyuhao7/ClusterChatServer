@@ -44,6 +44,21 @@ button {
     cursor: pointer;
 }
 
+.button-like {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.9);
+    cursor: pointer;
+}
+
+.hidden-input {
+    display: none;
+}
+
 #root {
     min-height: 100vh;
 }
@@ -236,6 +251,20 @@ button {
 .message-recalled {
     opacity: 0.72;
     border-style: dashed;
+}
+
+.attachment-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.attachment-image {
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .composer-box {

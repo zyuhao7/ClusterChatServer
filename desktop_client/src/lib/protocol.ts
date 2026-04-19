@@ -84,6 +84,15 @@ export interface TimelineItem {
     timestamp: string
     recalled?: boolean
     messageId?: number
+    attachment?: AttachmentPayload
+}
+
+export interface AttachmentPayload {
+    kind: "image" | "file"
+    url: string
+    name: string
+    mime: string
+    size: number
 }
 
 export interface ProtocolPushEvent {
@@ -99,12 +108,15 @@ export interface ProtocolPushEvent {
     message_id?: number
     read_state?: string
     operator_id?: number
+    user_id?: number
+    state?: string
 }
 
 export const CHAT_PROTOCOL_VERSION = 1
 export const ONE_CHAT_MSG = 7
 export const GROUP_CHAT_MSG = 15
 export const RECALL_NOTIFY_MSG = 25
+export const FRIEND_STATE_NOTIFY_MSG = 44
 export const ONE_CHAT_MSG_ACK = 8
 export const GROUP_CHAT_MSG_ACK = 16
 
@@ -169,15 +181,15 @@ function parseOfflineMessages(payload: LoginResponsePayload) {
 }
 
 export function timelineFromHistory(sessionId: string, history: HistoryEntry[]) {
-    return history.map((entry) => ({
-        id: `${sessionId}-history-${entry.id}`,
-        sessionId,
-        author: `${entry.sender_id}`,
-        body: entry.message,
-        timestamp: entry.created_at,
-        recalled: entry.recalled === 1,
-        messageId: entry.id,
-    })) satisfies TimelineItem[]
+    return history.map((entry) => toTimelineItem({
+        msgid: entry.group_id ? GROUP_CHAT_MSG : ONE_CHAT_MSG,
+        message_id: entry.id,
+        id: entry.sender_id,
+        groupid: entry.group_id,
+        msg: entry.message,
+        time: entry.created_at,
+        version: CHAT_PROTOCOL_VERSION,
+    }, sessionId, `${entry.sender_id}`)) satisfies TimelineItem[]
 }
 
 export function sessionPreviewFromTimeline(items: TimelineItem[]) {
@@ -217,15 +229,36 @@ export function resolveSessionId(event: ProtocolPushEvent) {
     return null
 }
 
-export function toTimelineItem(event: ProtocolPushEvent, sessionId: string): TimelineItem {
+function parseAttachmentPayload(raw: string): AttachmentPayload | null {
+    try {
+        const parsed = JSON.parse(raw) as Partial<AttachmentPayload>
+        if ((parsed.kind === "image" || parsed.kind === "file") && typeof parsed.url === "string" && typeof parsed.name === "string") {
+            return {
+                kind: parsed.kind,
+                url: parsed.url,
+                name: parsed.name,
+                mime: parsed.mime ?? "application/octet-stream",
+                size: parsed.size ?? 0,
+            }
+        }
+    } catch {
+        return null
+    }
+    return null
+}
+
+export function toTimelineItem(event: ProtocolPushEvent, sessionId: string, authorOverride?: string): TimelineItem {
+    const rawBody = event.msg || (event.msgid === RECALL_NOTIFY_MSG ? "message recalled" : "")
+    const attachment = rawBody ? parseAttachmentPayload(rawBody) : null
     return {
         id: `${sessionId}-${event.message_id ?? event.request_id ?? Date.now()}`,
         sessionId,
-        author: event.name || String(event.id ?? event.operator_id ?? "system"),
-        body: event.msg || (event.msgid === RECALL_NOTIFY_MSG ? "message recalled" : ""),
+        author: authorOverride || event.name || String(event.id ?? event.operator_id ?? "system"),
+        body: attachment ? attachment.name : rawBody,
         timestamp: event.time || new Date().toISOString(),
         recalled: event.msgid === RECALL_NOTIFY_MSG,
         messageId: event.message_id,
+        attachment: attachment ?? undefined,
     }
 }
 
