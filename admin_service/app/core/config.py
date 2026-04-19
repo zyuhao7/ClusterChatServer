@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     redis_host: str = "127.0.0.1"
     redis_port: int = 6379
     moderation_sensitive_words: str = "spam,ad,scam"
+    media_root: Path = BASE_DIR / "uploads"
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

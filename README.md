@@ -39,6 +39,7 @@ C++ 实现的集群聊天服务器，支持多服务器负载均衡与跨服务�
 - 支持搜索用户、黑名单增删与黑名单拦截发消息/加好友
 - 支持用户在 `online` 和 `busy` 间切换，查询和搜索结果会反映忙碌状态
 - 支持已登录用户修改昵称，用户详情、搜索和会话展示会读取新昵称
+- 支持头像上传与静态访问，桌面端可预览并上传头像到后端
 - 群组权限校验、退群、角色调整
 - 群主可授予或回收管理员，管理员可将非群主成员降为普通成员
 - 支持群公告、成员禁言、踢人等群管理闭环
@@ -249,6 +250,8 @@ mysql -uroot -p chat < db/migrations/001_constraints_and_indexes.sql
 mysql -uroot -p chat < db/migrations/002_message_history_and_admin_tables.sql
 mysql -uroot -p chat < db/migrations/003_password_hashing_prep.sql
 mysql -uroot -p chat < db/migrations/004_user_blacklist.sql
+mysql -uroot -p chat < db/migrations/005_group_moderation_features.sql
+mysql -uroot -p chat < db/migrations/006_user_avatar.sql
 ```
 
 如果在 Ubuntu 上执行时出现：

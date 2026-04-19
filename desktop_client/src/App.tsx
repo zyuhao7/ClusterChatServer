@@ -3,6 +3,7 @@ import { ChangeEvent, useEffect, useMemo, useState } from "react"
 import {
     addFriend,
     createGroup,
+    fetchUserProfile,
     joinGroup,
     kickGroupMember,
     login,
@@ -18,6 +19,7 @@ import {
     setNickname,
     setPresence,
     subscribeProtocolEvents,
+    uploadAvatar,
 } from "./lib/bridge"
 import { createProtocolSummary, directSessionId, groupSessionId } from "./lib/protocol"
 import { isTauriRuntime } from "./lib/tauri"
@@ -33,6 +35,7 @@ export default function App() {
     const [muteTargetId, setMuteTargetId] = useState("")
     const [muteMinutes, setMuteMinutes] = useState("10")
     const [kickTargetId, setKickTargetId] = useState("")
+    const [avatarFile, setAvatarFile] = useState<File | null>(null)
     const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("")
     const [avatarFileName, setAvatarFileName] = useState("")
 
@@ -78,6 +81,32 @@ export default function App() {
         }
     }, [groupProfile?.id, groupProfile?.announcement])
 
+    useEffect(() => {
+        if (!store.loggedInUserId) {
+            return
+        }
+
+        void fetchUserProfile(store.host, store.loggedInUserId)
+            .then((profile) => {
+                const avatarUrl = profile.avatar_url ? `http://${store.host}:8010${profile.avatar_url}` : ""
+                store.setLoggedInUserAvatarUrl(avatarUrl)
+            })
+            .catch(() => undefined)
+    }, [store.host, store.loggedInUserId])
+
+    useEffect(() => {
+        if (!selectedSession || selectedSession.kind !== "direct") {
+            return
+        }
+
+        void fetchUserProfile(store.host, selectedSession.rawId)
+            .then((profile) => {
+                const avatarUrl = profile.avatar_url ? `http://${store.host}:8010${profile.avatar_url}` : ""
+                useSessionStore.getState().updateFriendProfile(selectedSession.rawId, avatarUrl)
+            })
+            .catch(() => undefined)
+    }, [store.host, selectedSession?.kind, selectedSession?.rawId])
+
     async function runAction(label: string, action: () => Promise<void>) {
         setPending(label)
         try {
@@ -94,6 +123,7 @@ export default function App() {
         if (!file) {
             return
         }
+        setAvatarFile(file)
         setAvatarFileName(file.name)
         setAvatarPreviewUrl(URL.createObjectURL(file))
         store.setLastResponse(`Selected avatar draft: ${file.name}`)
@@ -152,6 +182,7 @@ export default function App() {
                                 runAction("logout", async () => {
                                     const response = await logout()
                                     store.resetSession()
+                                    setAvatarFile(null)
                                     setAvatarPreviewUrl("")
                                     setAvatarFileName("")
                                     store.setLastResponse(JSON.stringify(response, null, 2))
@@ -305,6 +336,24 @@ export default function App() {
                         <span>Avatar draft</span>
                         <input type="file" accept="image/*" onChange={handleAvatarChange} />
                     </label>
+                    <button
+                        disabled={!store.loggedInUserId || !avatarFile}
+                        onClick={() =>
+                            runAction("upload avatar", async () => {
+                                if (!avatarFile || !store.loggedInUserId) {
+                                    return
+                                }
+                                const profile = await uploadAvatar(store.host, store.loggedInUserId, avatarFile)
+                                const avatarUrl = profile.avatar_url ? `http://${store.host}:8010${profile.avatar_url}` : ""
+                                store.setLoggedInUserAvatarUrl(avatarUrl)
+                                store.setLastResponse(JSON.stringify(profile, null, 2))
+                            })
+                        }
+                        type="button"
+                    >
+                        Upload Avatar
+                    </button>
+                    {store.loggedInUserAvatarUrl ? <img alt="current avatar" className="avatar-preview" src={store.loggedInUserAvatarUrl} /> : null}
                     {avatarPreviewUrl ? <img alt="avatar preview" className="avatar-preview" src={avatarPreviewUrl} /> : null}
                     {avatarFileName ? <p className="muted">Selected file: {avatarFileName}</p> : null}
                 </section>
@@ -315,6 +364,7 @@ export default function App() {
                     {directProfile ? (
                         <div className="detail-card">
                             <strong>{directProfile.name}</strong>
+                            {directProfile.avatar_url ? <img alt="friend avatar" className="avatar-preview avatar-preview-small" src={directProfile.avatar_url} /> : null}
                             <span>ID: {directProfile.id}</span>
                             <span>State: {directProfile.state}</span>
                             <button onClick={() => runAction("add friend", async () => {

@@ -46,6 +46,7 @@ mysql -uroot -p chat < db/migrations/002_message_history_and_admin_tables.sql
 mysql -uroot -p chat < db/migrations/003_password_hashing_prep.sql
 mysql -uroot -p chat < db/migrations/004_user_blacklist.sql
 mysql -uroot -p chat < db/migrations/005_group_moderation_features.sql
+mysql -uroot -p chat < db/migrations/006_user_avatar.sql
 python3 scripts/migrate_passwords.py --user root --database chat
 ```
 

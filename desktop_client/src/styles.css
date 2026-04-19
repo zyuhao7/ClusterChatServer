@@ -282,6 +282,12 @@ button {
     border: 1px solid rgba(148, 163, 184, 0.16);
 }
 
+.avatar-preview-small {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+}
+
 .message-head {
     display: flex;
     justify-content: space-between;

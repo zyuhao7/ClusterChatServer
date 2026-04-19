@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 
-import type { HistoryEntry, LoginResponsePayload, ProtocolPushEvent, SearchUserEntry } from "./protocol"
+import type { HistoryEntry, LoginResponsePayload, ProtocolPushEvent, SearchUserEntry, UserProfile } from "./protocol"
 
 interface BridgeResponse {
     version: number
@@ -112,4 +112,30 @@ export async function sessionInfo() {
 
 export async function subscribeProtocolEvents(handler: (event: ProtocolPushEvent) => void) {
     return listen<ProtocolPushEvent>("protocol-event", (event) => handler(event.payload))
+}
+
+function adminBaseUrl(host: string) {
+    return `http://${host}:8010`
+}
+
+export async function fetchUserProfile(host: string, userId: number) {
+    const response = await fetch(`${adminBaseUrl(host)}/api/v1/users/${userId}`)
+    if (!response.ok) {
+        throw new Error(`Failed to load user profile ${userId}`)
+    }
+    return response.json() as Promise<UserProfile>
+}
+
+export async function uploadAvatar(host: string, userId: number, file: File) {
+    const form = new FormData()
+    form.append("avatar", file)
+    const response = await fetch(`${adminBaseUrl(host)}/api/v1/users/${userId}/avatar`, {
+        method: "POST",
+        body: form,
+    })
+    if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || "Avatar upload failed")
+    }
+    return response.json() as Promise<UserProfile>
 }

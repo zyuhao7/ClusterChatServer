@@ -29,6 +29,7 @@ interface SessionStoreState {
     password: string
     loggedInUserId: number | null
     loggedInUserName: string
+    loggedInUserAvatarUrl: string
     presence: string
     searchKeyword: string
     historyOrder: "asc" | "desc"
@@ -42,6 +43,7 @@ interface SessionStoreState {
     lastResponse: string
     setField: (field: string, value: string | number) => void
     setLoggedInUser: (userId: number, name: string) => void
+    setLoggedInUserAvatarUrl: (avatarUrl: string) => void
     setPresence: (presence: string) => void
     setSearchResults: (results: SearchUserEntry[]) => void
     setLastResponse: (payload: string) => void
@@ -51,6 +53,7 @@ interface SessionStoreState {
     applyProtocolEvent: (event: ProtocolPushEvent) => void
     upsertSearchSession: (user: SearchUserEntry) => void
     markFriend: (user: SearchUserEntry) => void
+    updateFriendProfile: (userId: number, avatarUrl: string) => void
     upsertGroupSession: (groupId: number, name: string, desc: string) => void
     updateGroupAnnouncement: (groupId: number, announcement: string) => void
     updateGroupMemberMute: (groupId: number, targetId: number, mutedUntil: string) => void
@@ -66,6 +69,7 @@ const initialState = {
     password: "",
     loggedInUserId: null,
     loggedInUserName: "",
+    loggedInUserAvatarUrl: "",
     presence: "offline",
     searchKeyword: "",
     historyOrder: "desc" as const,
@@ -100,6 +104,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
     ...initialState,
     setField: (field, value) => set(() => ({ [field]: value } as Partial<SessionStoreState>)),
     setLoggedInUser: (userId, name) => set(() => ({ loggedInUserId: userId, loggedInUserName: name })),
+    setLoggedInUserAvatarUrl: (loggedInUserAvatarUrl) => set(() => ({ loggedInUserAvatarUrl })),
     setPresence: (presence) => set(() => ({ presence })),
     setSearchResults: (searchResults) => set(() => ({ searchResults })),
     setLastResponse: (lastResponse) => set(() => ({ lastResponse })),
@@ -231,6 +236,18 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                 ...session,
                 subtitle: `friend · ${user.state}`,
             })),
+        })),
+    updateFriendProfile: (userId, avatarUrl) =>
+        set((state) => ({
+            friends: state.friends[userId]
+                ? {
+                    ...state.friends,
+                    [userId]: {
+                        ...state.friends[userId],
+                        avatar_url: avatarUrl,
+                    },
+                }
+                : state.friends,
         })),
     upsertGroupSession: (groupId, name, desc) =>
         set((state) => {

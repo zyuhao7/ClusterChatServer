@@ -253,3 +253,11 @@ For group history, replace `targetid` with `groupid`.
 - keep `request_id` generation in one client-side transport layer
 - treat `errno != 0` as business failure, not transport failure
 - keep history ordering, blacklist, nickname, and moderation actions in separate feature modules
+
+## Avatar Upload Path
+
+Avatar upload is handled by `admin_service`, not the TCP chat protocol.
+
+- `POST /api/v1/users/{user_id}/avatar`
+- multipart field name: `avatar`
+- static file base: `/media/avatars/...`

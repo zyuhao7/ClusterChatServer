@@ -116,6 +116,7 @@ pytest tests/integration/test_admin_service.py -q
 - `GET /metrics`
 - `GET /api/v1/users` (`state=online|offline|banned`)
 - `GET /api/v1/users/{user_id}`
+- `POST /api/v1/users/{user_id}/avatar`
 - `GET /api/v1/friends`
 - `GET /api/v1/groups`
 - `GET /api/v1/offline-messages`

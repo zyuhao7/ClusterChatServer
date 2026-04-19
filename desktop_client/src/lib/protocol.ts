@@ -15,6 +15,13 @@ export interface SearchUserEntry {
     blocked_by_target: boolean
 }
 
+export interface UserProfile {
+    id: number
+    name: string
+    state: PresenceState | string
+    avatar_url?: string
+}
+
 export interface HistoryEntry {
     id: number
     sender_id: number
@@ -30,6 +37,7 @@ export interface FriendEntry {
     id: number
     name: string
     state: PresenceState | string
+    avatar_url?: string
 }
 
 export interface GroupMemberEntry extends FriendEntry {

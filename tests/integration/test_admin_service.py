@@ -15,11 +15,13 @@ if str(REPO_ROOT) not in sys.path:
 from admin_service.app.db.database import get_db
 from admin_service.app.main import app
 from admin_service.app.models.models import Base, MessageHistory, User
+from admin_service.app.routers import users as users_router
 
 
 @pytest.fixture
 def client(tmp_path: Path):
     database_path = tmp_path / "admin-service.sqlite3"
+    media_root = tmp_path / "uploads"
     engine = create_engine(
         f"sqlite:///{database_path}",
         connect_args={"check_same_thread": False},
@@ -48,11 +50,17 @@ def client(tmp_path: Path):
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    original_media_root = users_router.settings.media_root
+    original_avatar_root = users_router.AVATAR_ROOT
+    users_router.settings.media_root = media_root
+    users_router.AVATAR_ROOT = media_root / "avatars"
     try:
         with TestClient(app) as test_client:
             yield test_client
     finally:
         app.dependency_overrides.clear()
+        users_router.settings.media_root = original_media_root
+        users_router.AVATAR_ROOT = original_avatar_root
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
@@ -127,6 +135,30 @@ def test_user_detail_reflects_renamed_name(client: TestClient) -> None:
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["name"] == "alice-renamed"
+
+
+def test_upload_avatar_updates_user_profile(client: TestClient, tmp_path: Path) -> None:
+    avatar_bytes = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+        b"\x00\x00\x00\x0bIDATx\x9cc``\x00\x00\x00\x02\x00\x01\xe2!\xbc3"
+        b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    resp = client.post(
+        "/api/v1/users/1/avatar",
+        files={"avatar": ("avatar.png", avatar_bytes, "image/png")},
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["avatar_url"] == "/media/avatars/user-1.png"
+
+    detail_resp = client.get("/api/v1/users/1")
+    assert detail_resp.status_code == 200
+    assert detail_resp.json()["avatar_url"] == "/media/avatars/user-1.png"
+
+    avatar_path = tmp_path / "uploads" / "avatars" / "user-1.png"
+    assert avatar_path.exists()
 
 
 def test_ban_user_requires_admin_token(client: TestClient) -> None:
