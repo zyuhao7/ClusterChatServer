@@ -111,6 +111,18 @@ vector<User> UserModal::searchByName(const string &keyword, int limit, int offse
     return users;
 }
 
+bool UserModal::updateName(int id, const string &name)
+{
+    char sql[1024] = {0};
+    sprintf(sql, "update user set name = '%s' where id = %d", name.c_str(), id);
+    MySQL mysql;
+    if(mysql.connect())
+    {
+        return mysql.update(sql);
+    }
+    return false;
+}
+
 bool UserModal::updateState(User& user)
 {
      // 1. 组装 sql 语句

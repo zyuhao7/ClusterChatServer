@@ -40,6 +40,7 @@ ChatService::ChatService()
     _msgHandlerMap.insert({ADD_BLACKLIST_MSG, std::bind(&ChatService::addBlacklist, this, _1, _2, _3)});
     _msgHandlerMap.insert({REMOVE_BLACKLIST_MSG, std::bind(&ChatService::removeBlacklist, this, _1, _2, _3)});
     _msgHandlerMap.insert({SET_USER_STATE_MSG, std::bind(&ChatService::setUserState, this, _1, _2, _3)});
+    _msgHandlerMap.insert({SET_NICKNAME_MSG, std::bind(&ChatService::setNickname, this, _1, _2, _3)});
 
     // 连接 redis服务器
     if (_redis.Connect())
@@ -933,6 +934,46 @@ void ChatService::setUserState(const TcpConnectionPtr &conn, json &js, Timestamp
     json extra;
     extra["state"] = state;
     sendAck(conn, SET_USER_STATE_MSG_ACK, request_id, ERR_OK, "", extra);
+}
+
+void ChatService::setNickname(const TcpConnectionPtr &conn, json &js, Timestamp time)
+{
+    string request_id = requestIdFrom(js);
+    int userid = js["id"].get<int>();
+    string name = js.value("name", "");
+    if (name.empty())
+    {
+        sendAck(conn, SET_NICKNAME_MSG_ACK, request_id, ERR_USER_NAME_EMPTY, "昵称不能为空");
+        return;
+    }
+
+    bool has_connection = false;
+    {
+        lock_guard<mutex> lock(_mtx);
+        auto it = _userConnMap.find(userid);
+        has_connection = (it != _userConnMap.end() && it->second == conn);
+    }
+    if (!has_connection)
+    {
+        sendAck(conn, SET_NICKNAME_MSG_ACK, request_id, ERR_AUTH_INVALID_CREDENTIALS, "当前连接未登录");
+        return;
+    }
+
+    User user = _userModal.query(userid);
+    if (user.GetId() != userid)
+    {
+        sendAck(conn, SET_NICKNAME_MSG_ACK, request_id, ERR_GROUP_USER_NOT_FOUND, "用户不存在");
+        return;
+    }
+    if (!_userModal.updateName(userid, name))
+    {
+        sendAck(conn, SET_NICKNAME_MSG_ACK, request_id, ERR_USER_NAME_UPDATE_FAILED, "更新昵称失败");
+        return;
+    }
+
+    json extra;
+    extra["name"] = name;
+    sendAck(conn, SET_NICKNAME_MSG_ACK, request_id, ERR_OK, "", extra);
 }
 
 void ChatService::handleRedisSubscribeMessage(int userid, string msg)

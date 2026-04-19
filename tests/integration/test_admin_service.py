@@ -112,6 +112,23 @@ def test_list_users_filters_busy_state(client: TestClient) -> None:
     assert payload[0]["state"] == "busy"
 
 
+def test_user_detail_reflects_renamed_name(client: TestClient) -> None:
+    db = next(iter(app.dependency_overrides[get_db]()))
+    try:
+        user = db.query(User).filter(User.name == "alice").first()
+        assert user is not None
+        user.name = "alice-renamed"
+        db.commit()
+        user_id = user.id
+    finally:
+        db.close()
+
+    resp = client.get(f"/api/v1/users/{user_id}")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["name"] == "alice-renamed"
+
+
 def test_ban_user_requires_admin_token(client: TestClient) -> None:
     resp = client.post("/api/v1/admin/users/1/ban")
     assert resp.status_code == 401

@@ -578,6 +578,15 @@ void readTaskHandler(int clientfd)
             doGenericAck("set status", js);
             continue;
         }
+        else if (SET_NICKNAME_MSG_ACK == msgtype)
+        {
+            if (js.value("errno", ERR_USER_NAME_EMPTY) == ERR_OK && js.contains("name"))
+            {
+                g_CurrentUser.SetName(js["name"].get<string>());
+            }
+            doGenericAck("set name", js);
+            continue;
+        }
     }
 }
 
@@ -643,6 +652,8 @@ void blockuser(int, string);
 void unblockuser(int, string);
 // "setstatus" command handler
 void setstatus(int, string);
+// "setname" command handler
+void setname(int, string);
 
 // 系统支持的客户端命令列表
 unordered_map<string, string> commandMap = {
@@ -660,6 +671,7 @@ unordered_map<string, string> commandMap = {
     {"blockuser", "加入黑名单,格式blockuser:userid"},
     {"unblockuser", "移出黑名单,格式unblockuser:userid"},
     {"setstatus", "设置当前状态,格式setstatus:online|busy"},
+    {"setname", "修改昵称,格式setname:new_name"},
     {"readmsg", "标记消息已读,格式readmsg:message_id"},
     {"recall", "撤回消息,格式recall:message_id[:toid|groupid]"},
     {"loginout", "注销,格式loginout"}};
@@ -680,6 +692,7 @@ unordered_map<string, function<void(int, string)>> commandHandlerMap = {
     {"blockuser", blockuser},
     {"unblockuser", unblockuser},
     {"setstatus", setstatus},
+    {"setname", setname},
     {"readmsg", readmsg},
     {"recall", recallmsg},
     {"loginout", loginout}};
@@ -1115,6 +1128,26 @@ void setstatus(int clientfd, string str)
     if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
     {
         cerr << "send set user state msg error: " << request << endl;
+    }
+}
+
+void setname(int clientfd, string str)
+{
+    if (str.empty())
+    {
+        cerr << "invalid setname format, please use: setname:new_name" << endl;
+        return;
+    }
+
+    json js;
+    setProtocolMeta(js, SET_NICKNAME_MSG);
+    js["id"] = g_CurrentUser.GetId();
+    js["name"] = str;
+
+    string request = js.dump();
+    if (send(clientfd, request.c_str(), strlen(request.c_str()) + 1, 0) == -1)
+    {
+        cerr << "send set nickname msg error: " << request << endl;
     }
 }
 

@@ -35,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--history-pagination-checks", action="store_true")
     parser.add_argument("--search-blacklist-checks", action="store_true")
     parser.add_argument("--busy-state-checks", action="store_true")
+    parser.add_argument("--nickname-checks", action="store_true")
     parser.add_argument("--mysql-host", default="127.0.0.1")
     parser.add_argument("--mysql-port", type=int, default=3306)
     parser.add_argument("--mysql-user", default="root")
@@ -661,6 +662,64 @@ def verify_busy_state(sock: socket.socket, now: int, args: argparse.Namespace) -
             mysql_query_lines(f"DELETE FROM user WHERE id = {user_id};", args)
 
 
+def verify_nickname_update(sock: socket.socket, now: int, args: argparse.Namespace) -> int:
+    password = "codex_pass_123"
+    original_name = f"rename_user_{now}"
+    updated_name = f"renamed_user_{now}"
+    user_id = -1
+
+    try:
+        reg_req = {
+            "version": 1,
+            "msgid": 5,
+            "request_id": f"rename-reg-{now}",
+            "name": original_name,
+            "password": password,
+        }
+        sock.sendall(json.dumps(reg_req).encode("utf-8"))
+        reg_resp = recv_json(sock)
+        print("RENAME_REG", reg_resp)
+        if reg_resp.get("errno") != ERR_OK:
+            return 55
+        user_id = reg_resp["id"]
+
+        login_req = {
+            "version": 1,
+            "msgid": 1,
+            "request_id": f"rename-login-{now}",
+            "id": user_id,
+            "password": password,
+        }
+        sock.sendall(json.dumps(login_req).encode("utf-8"))
+        login_resp = recv_json(sock)
+        print("RENAME_LOGIN", login_resp)
+        if login_resp.get("errno") != ERR_OK:
+            return 56
+
+        rename_req = {
+            "version": 1,
+            "msgid": 36,
+            "request_id": f"rename-set-{now}",
+            "id": user_id,
+            "name": updated_name,
+        }
+        sock.sendall(json.dumps(rename_req).encode("utf-8"))
+        rename_resp = recv_json(sock)
+        print("RENAME_SET", rename_resp)
+        if rename_resp.get("errno") != ERR_OK:
+            return 57
+        if rename_resp.get("name") != updated_name:
+            return 58
+
+        name_rows = mysql_query_lines(f"SELECT name FROM user WHERE id = {user_id};", args)
+        if not name_rows or name_rows[0] != updated_name:
+            return 59
+        return 0
+    finally:
+        if user_id > 0:
+            mysql_query_lines(f"DELETE FROM user WHERE id = {user_id};", args)
+
+
 def main() -> int:
     args = parse_args()
     now = int(time.time())
@@ -685,6 +744,8 @@ def main() -> int:
             return verify_search_and_blacklist(sock, now, args)
         if args.busy_state_checks:
             return verify_busy_state(sock, now, args)
+        if args.nickname_checks:
+            return verify_nickname_update(sock, now, args)
 
         reg_req = {
             "version": protocol_version,
