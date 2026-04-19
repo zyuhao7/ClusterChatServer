@@ -1,0 +1,29 @@
+{
+    "name": "cluster-chat-desktop-client",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "preview": "vite preview",
+        "typecheck": "tsc --noEmit",
+        "tauri:dev": "tauri dev",
+        "tauri:build": "tauri build"
+    },
+    "dependencies": {
+        "@tanstack/react-query": "^5.59.0",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "zustand": "^5.0.0"
+    },
+    "devDependencies": {
+        "@tauri-apps/api": "^2.0.0",
+        "@tauri-apps/cli": "^2.0.0",
+        "@types/react": "^18.3.12",
+        "@types/react-dom": "^18.3.1",
+        "@vitejs/plugin-react": "^4.3.3",
+        "typescript": "^5.6.3",
+        "vite": "^5.4.10"
+    }
+}
