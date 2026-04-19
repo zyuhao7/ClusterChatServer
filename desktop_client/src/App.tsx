@@ -73,6 +73,10 @@ function toDraft(file: File): AttachmentDraft {
 export default function App() {
     const store = useSessionStore()
     const [pending, setPending] = useState<string | null>(null)
+    const [sessionFilter, setSessionFilter] = useState("")
+    const [memberFilter, setMemberFilter] = useState("")
+    const [attachmentFilter, setAttachmentFilter] = useState<"all" | "images" | "files">("all")
+    const [attachmentSearch, setAttachmentSearch] = useState("")
     const [newGroupName, setNewGroupName] = useState("")
     const [newGroupDesc, setNewGroupDesc] = useState("")
     const [joinGroupId, setJoinGroupId] = useState("")
@@ -91,7 +95,15 @@ export default function App() {
 
     const protocolSummary = useMemo(() => createProtocolSummary(), [])
     const sortedSessions = useMemo(() => {
-        return [...store.sessions].sort((a, b) => {
+        const filtered = [...store.sessions].filter((session) => {
+            if (!sessionFilter.trim()) {
+                return true
+            }
+            const keyword = sessionFilter.toLowerCase()
+            return session.title.toLowerCase().includes(keyword) || session.subtitle.toLowerCase().includes(keyword)
+        })
+
+        return filtered.sort((a, b) => {
             const aPinned = store.pinnedSessionIds.includes(a.sessionId)
             const bPinned = store.pinnedSessionIds.includes(b.sessionId)
             if (aPinned !== bPinned) {
@@ -99,11 +111,37 @@ export default function App() {
             }
             return b.latestTimestamp.localeCompare(a.latestTimestamp)
         })
-    }, [store.pinnedSessionIds, store.sessions])
+    }, [sessionFilter, store.pinnedSessionIds, store.sessions])
     const selectedSession = sortedSessions.find((session) => session.sessionId === store.selectedSessionId) ?? null
-    const currentTimeline = selectedSession ? store.timelines[selectedSession.sessionId] ?? [] : []
+    const currentTimelineRaw = selectedSession ? store.timelines[selectedSession.sessionId] ?? [] : []
     const directProfile = selectedSession?.kind === "direct" ? store.friends[selectedSession.rawId] ?? null : null
     const groupProfile = selectedSession?.kind === "group" ? store.groups[selectedSession.rawId] ?? null : null
+    const filteredMembers = useMemo(() => {
+        if (!groupProfile) {
+            return []
+        }
+        if (!memberFilter.trim()) {
+            return groupProfile.users
+        }
+        const keyword = memberFilter.toLowerCase()
+        return groupProfile.users.filter((member) => member.name.toLowerCase().includes(keyword) || String(member.id).includes(keyword))
+    }, [groupProfile, memberFilter])
+    const currentTimeline = useMemo(() => {
+        return currentTimelineRaw.filter((entry) => {
+            if (attachmentFilter === "images" && entry.attachment?.kind !== "image") {
+                return false
+            }
+            if (attachmentFilter === "files" && entry.attachment?.kind !== "file") {
+                return false
+            }
+            if (attachmentSearch.trim()) {
+                const keyword = attachmentSearch.toLowerCase()
+                const haystack = entry.attachment ? `${entry.attachment.name} ${entry.attachment.mime}`.toLowerCase() : entry.body.toLowerCase()
+                return haystack.includes(keyword)
+            }
+            return attachmentFilter === "all" ? true : Boolean(entry.attachment)
+        })
+    }, [attachmentFilter, attachmentSearch, currentTimelineRaw])
 
     useEffect(() => {
         if (!isTauriRuntime()) {
@@ -367,6 +405,10 @@ export default function App() {
 
                 <section>
                     <h2>Sessions</h2>
+                    <label className="field">
+                        <span>Search sessions</span>
+                        <input value={sessionFilter} onChange={(event) => setSessionFilter(event.target.value)} placeholder="Search session title or subtitle" />
+                    </label>
                     <div className="session-list">
                         {sortedSessions.length === 0 ? <p className="muted">No sessions yet.</p> : null}
                         {sortedSessions.map((session) => (
@@ -433,6 +475,14 @@ export default function App() {
                 </section>
 
                 <section className="timeline timeline-scroll">
+                    <div className="timeline-toolbar">
+                        <div className="button-row compact-row">
+                            <button className={attachmentFilter === "all" ? "filter-button filter-button-active" : "filter-button"} onClick={() => setAttachmentFilter("all")} type="button">All</button>
+                            <button className={attachmentFilter === "images" ? "filter-button filter-button-active" : "filter-button"} onClick={() => setAttachmentFilter("images")} type="button">Images</button>
+                            <button className={attachmentFilter === "files" ? "filter-button filter-button-active" : "filter-button"} onClick={() => setAttachmentFilter("files")} type="button">Files</button>
+                        </div>
+                        <input value={attachmentSearch} onChange={(event) => setAttachmentSearch(event.target.value)} placeholder="Filter attachment history" />
+                    </div>
                     {currentTimeline.length === 0 ? <p className="muted">No messages for the selected session yet.</p> : null}
                     {currentTimeline.map((entry) => (
                         <article key={entry.id} className={entry.recalled ? "message-card message-recalled" : "message-card"}>
@@ -544,6 +594,12 @@ export default function App() {
             <aside className="panel inspector">
                 <section className="card-section">
                     <p className="eyebrow">Profile Actions</p>
+                    <div className="detail-card">
+                        <strong>{store.loggedInUserName || "Guest"}</strong>
+                        <span>User ID: {store.loggedInUserId ?? "-"}</span>
+                        <span>Presence: {store.presence}</span>
+                        <span>Server: {store.host}:{store.port}</span>
+                    </div>
                     <div className="button-row">
                         <button onClick={() => runAction("set busy", async () => {
                             const response = await setPresence("busy")
@@ -588,6 +644,17 @@ export default function App() {
                     {store.loggedInUserAvatarUrl ? <img alt="current avatar" className="avatar-preview" src={store.loggedInUserAvatarUrl} /> : null}
                     {avatarPreviewUrl ? <img alt="avatar preview" className="avatar-preview" src={avatarPreviewUrl} /> : null}
                     {avatarFileName ? <p className="muted">Selected file: {avatarFileName}</p> : null}
+                    <button
+                        disabled={!avatarFile && !avatarPreviewUrl}
+                        onClick={() => {
+                            setAvatarFile(null)
+                            setAvatarPreviewUrl("")
+                            setAvatarFileName("")
+                        }}
+                        type="button"
+                    >
+                        Reset Avatar Draft
+                    </button>
                 </section>
 
                 <section className="card-section">
@@ -676,13 +743,21 @@ export default function App() {
                             store.updateGroupAnnouncement(groupProfile.id, announcementDraft)
                             store.setLastResponse(JSON.stringify(response, null, 2))
                         })} type="button">Update Announcement</button>
+                        <label className="field">
+                            <span>Filter members</span>
+                            <input value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)} placeholder="Search by name or ID" />
+                        </label>
                         <div className="member-list">
-                            {groupProfile.users.map((member) => (
-                                <div key={member.id} className="detail-card member-card">
+                            {filteredMembers.map((member) => (
+                                <div key={member.id} className="detail-card member-card member-card-interactive">
                                     <strong>{member.name}</strong>
                                     <span>ID: {member.id}</span>
                                     <span>Role: {member.role}</span>
                                     {member.muted_until ? <span>Muted until: {member.muted_until}</span> : null}
+                                    <div className="button-row compact-row">
+                                        <button onClick={() => setMuteTargetId(String(member.id))} type="button">Pick For Mute</button>
+                                        <button onClick={() => setKickTargetId(String(member.id))} type="button">Pick For Kick</button>
+                                    </div>
                                 </div>
                             ))}
                         </div>

@@ -442,6 +442,26 @@ button {
     flex: 1;
 }
 
+.timeline-toolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.filter-button {
+    background: rgba(15, 23, 42, 0.68);
+}
+
+.filter-button-active {
+    border-color: rgba(96, 165, 250, 0.7);
+    background: rgba(37, 99, 235, 0.22);
+}
+
+.member-card-interactive {
+    cursor: default;
+}
+
 @media (max-width: 1200px) {
     .app-shell {
         grid-template-columns: 240px minmax(0, 1fr);
