@@ -3,10 +3,17 @@ import { create } from "zustand"
 import {
     buildBootstrapTimeline,
     buildSessionsFromLogin,
+    directSessionId,
+    groupSessionId,
+    parseFriends,
+    parseGroups,
     RECALL_NOTIFY_MSG,
     resolveSessionId,
+    sessionPreviewFromTimeline,
     timelineFromHistory,
     toTimelineItem,
+    type FriendEntry,
+    type GroupEntry,
     type HistoryEntry,
     type LoginResponsePayload,
     type ProtocolPushEvent,
@@ -24,13 +31,14 @@ interface SessionStoreState {
     loggedInUserName: string
     presence: string
     searchKeyword: string
-    historyTargetId: string
-    historyGroupId: string
     historyOrder: "asc" | "desc"
     selectedSessionId: string | null
+    composerText: string
     sessions: SessionListItem[]
     timelines: Record<string, TimelineItem[]>
     searchResults: SearchUserEntry[]
+    friends: Record<number, FriendEntry>
+    groups: Record<number, GroupEntry>
     lastResponse: string
     setField: (field: string, value: string | number) => void
     setLoggedInUser: (userId: number, name: string) => void
@@ -42,6 +50,7 @@ interface SessionStoreState {
     replaceHistory: (sessionId: string, entries: HistoryEntry[]) => void
     applyProtocolEvent: (event: ProtocolPushEvent) => void
     upsertSearchSession: (user: SearchUserEntry) => void
+    appendLocalMessage: (sessionId: string, author: string, body: string, timestamp: string, messageId?: number) => void
     resetSession: () => void
 }
 
@@ -54,14 +63,25 @@ const initialState = {
     loggedInUserName: "",
     presence: "offline",
     searchKeyword: "",
-    historyTargetId: "",
-    historyGroupId: "",
     historyOrder: "desc" as const,
     selectedSessionId: null,
+    composerText: "",
     sessions: [] as SessionListItem[],
     timelines: {} as Record<string, TimelineItem[]>,
     searchResults: [] as SearchUserEntry[],
+    friends: {} as Record<number, FriendEntry>,
+    groups: {} as Record<number, GroupEntry>,
     lastResponse: "",
+}
+
+function buildLookupMaps(payload: LoginResponsePayload) {
+    const friends = Object.fromEntries(parseFriends(payload).map((friend) => [friend.id, friend]))
+    const groups = Object.fromEntries(parseGroups(payload).map((group) => [group.id, group]))
+    return { friends, groups }
+}
+
+function updateSessionMeta(sessions: SessionListItem[], sessionId: string, updater: (session: SessionListItem) => SessionListItem) {
+    return sessions.map((session) => (session.sessionId === sessionId ? updater(session) : session))
 }
 
 function appendTimelineItem(timelines: Record<string, TimelineItem[]>, item: TimelineItem) {
@@ -78,25 +98,43 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
     setPresence: (presence) => set(() => ({ presence })),
     setSearchResults: (searchResults) => set(() => ({ searchResults })),
     setLastResponse: (lastResponse) => set(() => ({ lastResponse })),
-    setSelectedSessionId: (selectedSessionId) => set(() => ({ selectedSessionId })),
+    setSelectedSessionId: (selectedSessionId) =>
+        set((state) => ({
+            selectedSessionId,
+            sessions: selectedSessionId
+                ? updateSessionMeta(state.sessions, selectedSessionId, (session) => ({ ...session, unreadCount: 0 }))
+                : state.sessions,
+        })),
     bootstrapFromLogin: (payload) =>
         set(() => {
             const sessions = buildSessionsFromLogin(payload)
-            const timelineMap = Object.fromEntries(buildBootstrapTimeline(payload))
+            const timelineEntries = Object.fromEntries(buildBootstrapTimeline(payload))
+            const sessionsWithPreview = sessions.map((session) => {
+                const preview = sessionPreviewFromTimeline(timelineEntries[session.sessionId] ?? [])
+                return { ...session, ...preview }
+            })
+            const { friends, groups } = buildLookupMaps(payload)
             return {
-                sessions,
-                timelines: timelineMap,
-                selectedSessionId: sessions[0]?.sessionId ?? null,
+                sessions: sessionsWithPreview,
+                timelines: timelineEntries,
+                selectedSessionId: sessionsWithPreview[0]?.sessionId ?? null,
+                friends,
+                groups,
             }
         }),
     replaceHistory: (sessionId, entries) =>
-        set((state) => ({
-            timelines: {
-                ...state.timelines,
-                [sessionId]: timelineFromHistory(sessionId, entries),
-            },
-            selectedSessionId: sessionId,
-        })),
+        set((state) => {
+            const timeline = timelineFromHistory(sessionId, entries)
+            const preview = sessionPreviewFromTimeline(timeline)
+            return {
+                timelines: {
+                    ...state.timelines,
+                    [sessionId]: timeline,
+                },
+                sessions: updateSessionMeta(state.sessions, sessionId, (session) => ({ ...session, unreadCount: 0, ...preview })),
+                selectedSessionId: sessionId,
+            }
+        }),
     applyProtocolEvent: (event) =>
         set((state) => {
             const sessionId = resolveSessionId(event)
@@ -112,12 +150,17 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                             ),
                         ]),
                     )
-                    return { timelines }
+                    const sessions = state.sessions.map((session) => ({
+                        ...session,
+                        ...sessionPreviewFromTimeline(timelines[session.sessionId] ?? []),
+                    }))
+                    return { timelines, sessions }
                 }
                 return state
             }
 
-            const nextTimelines = appendTimelineItem(state.timelines, toTimelineItem(event, sessionId))
+            const timelineItem = toTimelineItem(event, sessionId)
+            const nextTimelines = appendTimelineItem(state.timelines, timelineItem)
             let sessions = state.sessions
             if (!sessions.some((session) => session.sessionId === sessionId)) {
                 sessions = [
@@ -129,9 +172,19 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                         kind: event.groupid ? "group" : "direct",
                         presence: event.groupid ? "group" : "online",
                         subtitle: event.groupid ? "incoming group message" : "incoming direct message",
+                        unreadCount: 0,
+                        latestMessage: "",
+                        latestTimestamp: "",
                     },
                 ]
             }
+
+            const preview = sessionPreviewFromTimeline(nextTimelines[sessionId] ?? [])
+            sessions = updateSessionMeta(sessions, sessionId, (session) => ({
+                ...session,
+                ...preview,
+                unreadCount: state.selectedSessionId === sessionId ? 0 : session.unreadCount + 1,
+            }))
 
             return {
                 sessions,
@@ -141,7 +194,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
         }),
     upsertSearchSession: (user) =>
         set((state) => {
-            const sessionId = `direct-${user.id}`
+            const sessionId = directSessionId(user.id)
             if (state.sessions.some((session) => session.sessionId === sessionId)) {
                 return { selectedSessionId: sessionId }
             }
@@ -155,9 +208,30 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                         kind: "direct",
                         presence: user.state,
                         subtitle: `search result · ${user.state}`,
+                        unreadCount: 0,
+                        latestMessage: "",
+                        latestTimestamp: "",
                     },
                 ],
                 selectedSessionId: sessionId,
+            }
+        }),
+    appendLocalMessage: (sessionId, author, body, timestamp, messageId) =>
+        set((state) => {
+            const item: TimelineItem = {
+                id: `${sessionId}-${messageId ?? Date.now()}`,
+                sessionId,
+                author,
+                body,
+                timestamp,
+                messageId,
+            }
+            const timelines = appendTimelineItem(state.timelines, item)
+            const preview = sessionPreviewFromTimeline(timelines[sessionId] ?? [])
+            return {
+                timelines,
+                composerText: "",
+                sessions: updateSessionMeta(state.sessions, sessionId, (session) => ({ ...session, ...preview })),
             }
         }),
     resetSession: () =>

@@ -34,6 +34,16 @@ export async function setNickname(name: string) {
     return assertOk(payload)
 }
 
+export async function sendDirectMessage(targetId: number, message: string) {
+    const payload = await invoke<BridgeResponse>("send_direct_message", { targetId, message })
+    return assertOk(payload)
+}
+
+export async function sendGroupMessage(groupId: number, message: string) {
+    const payload = await invoke<BridgeResponse>("send_group_message", { groupId, message })
+    return assertOk(payload)
+}
+
 export async function setPresence(state: "online" | "busy") {
     const payload = await invoke<BridgeResponse>("set_presence", { stateName: state })
     return assertOk(payload)

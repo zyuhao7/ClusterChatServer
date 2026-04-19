@@ -63,6 +63,9 @@ export interface SessionListItem {
     kind: "direct" | "group"
     presence: string
     subtitle: string
+    unreadCount: number
+    latestMessage: string
+    latestTimestamp: string
 }
 
 export interface TimelineItem {
@@ -94,6 +97,8 @@ export const CHAT_PROTOCOL_VERSION = 1
 export const ONE_CHAT_MSG = 7
 export const GROUP_CHAT_MSG = 15
 export const RECALL_NOTIFY_MSG = 25
+export const ONE_CHAT_MSG_ACK = 8
+export const GROUP_CHAT_MSG_ACK = 16
 
 export function directSessionId(userId: number) {
     return `direct-${userId}`
@@ -128,6 +133,9 @@ export function buildSessionsFromLogin(payload: LoginResponsePayload) {
             kind: "direct",
             presence: friend.state,
             subtitle: `friend · ${friend.state}`,
+            unreadCount: 0,
+            latestMessage: "",
+            latestTimestamp: "",
         })
     }
 
@@ -139,6 +147,9 @@ export function buildSessionsFromLogin(payload: LoginResponsePayload) {
             kind: "group",
             presence: "group",
             subtitle: group.announcement || group.groupdesc || "group",
+            unreadCount: 0,
+            latestMessage: "",
+            latestTimestamp: "",
         })
     }
 
@@ -159,6 +170,17 @@ export function timelineFromHistory(sessionId: string, history: HistoryEntry[]) 
         recalled: entry.recalled === 1,
         messageId: entry.id,
     })) satisfies TimelineItem[]
+}
+
+export function sessionPreviewFromTimeline(items: TimelineItem[]) {
+    const latest = items[items.length - 1]
+    if (!latest) {
+        return { latestMessage: "", latestTimestamp: "" }
+    }
+    return {
+        latestMessage: latest.body,
+        latestTimestamp: latest.timestamp,
+    }
 }
 
 export function buildBootstrapTimeline(payload: LoginResponsePayload) {

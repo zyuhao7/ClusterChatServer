@@ -28,6 +28,7 @@ struct Session {
     host: String,
     port: u16,
     user_id: i64,
+    user_name: String,
     pending: PendingMap,
 }
 
@@ -146,6 +147,10 @@ fn send_request(session: &Session, payload: Value) -> Result<Value, String> {
         .map_err(|err| err.to_string())
 }
 
+fn current_time_string() -> String {
+    chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
 #[tauri::command]
 fn login(
     app: tauri::AppHandle,
@@ -175,12 +180,19 @@ fn login(
         host: host.clone(),
         port,
         user_id,
+        user_name: String::new(),
         pending: pending.clone(),
     };
     let response = send_request(&temp_session, payload)?;
     if response.get("errno").and_then(Value::as_i64) == Some(0) {
+        let mut connected_session = temp_session;
+        connected_session.user_name = response
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
         let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-        *guard = Some(temp_session);
+        *guard = Some(connected_session);
     } else {
         let stream = writer.lock().map_err(|err| err.to_string())?;
         let _ = stream.shutdown(Shutdown::Both);
@@ -222,7 +234,7 @@ fn set_presence(state: tauri::State<AppState>, state_name: String) -> Result<Val
 
 #[tauri::command]
 fn set_nickname(state: tauri::State<AppState>, name: String) -> Result<Value, String> {
-    let guard = state.session.lock().map_err(|err| err.to_string())?;
+    let mut guard = state.session.lock().map_err(|err| err.to_string())?;
     let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
@@ -230,6 +242,50 @@ fn set_nickname(state: tauri::State<AppState>, name: String) -> Result<Value, St
         "request_id": next_request_id(&state, "desktop-name"),
         "id": session.user_id,
         "name": name,
+    });
+    let response = send_request(session, payload)?;
+    if response.get("errno").and_then(Value::as_i64) == Some(0) {
+        if let Some(session) = guard.as_mut() {
+            session.user_name = response
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+        }
+    }
+    Ok(response)
+}
+
+#[tauri::command]
+fn send_direct_message(state: tauri::State<AppState>, target_id: i64, message: String) -> Result<Value, String> {
+    let guard = state.session.lock().map_err(|err| err.to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let payload = json!({
+        "version": CHAT_PROTOCOL_VERSION,
+        "msgid": ONE_CHAT_MSG,
+        "request_id": next_request_id(&state, "desktop-direct-msg"),
+        "id": session.user_id,
+        "name": session.user_name,
+        "toid": target_id,
+        "msg": message,
+        "time": current_time_string(),
+    });
+    send_request(session, payload)
+}
+
+#[tauri::command]
+fn send_group_message(state: tauri::State<AppState>, group_id: i64, message: String) -> Result<Value, String> {
+    let guard = state.session.lock().map_err(|err| err.to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let payload = json!({
+        "version": CHAT_PROTOCOL_VERSION,
+        "msgid": GROUP_CHAT_MSG,
+        "request_id": next_request_id(&state, "desktop-group-msg"),
+        "id": session.user_id,
+        "name": session.user_name,
+        "groupid": group_id,
+        "msg": message,
+        "time": current_time_string(),
     });
     send_request(session, payload)
 }
@@ -305,6 +361,7 @@ fn session_info(state: tauri::State<AppState>) -> Result<Value, String> {
             "host": session.host,
             "port": session.port,
             "user_id": session.user_id,
+            "user_name": session.user_name,
         }))
     } else {
         Ok(json!({ "connected": false }))
@@ -322,6 +379,8 @@ fn main() {
             logout,
             set_presence,
             set_nickname,
+            send_direct_message,
+            send_group_message,
             search_users,
             query_direct_history,
             query_group_history,

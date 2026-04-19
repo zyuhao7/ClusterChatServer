@@ -6,6 +6,8 @@ import {
     queryDirectHistory,
     queryGroupHistory,
     searchUsers,
+    sendDirectMessage,
+    sendGroupMessage,
     sessionInfo,
     setNickname,
     setPresence,
@@ -21,6 +23,8 @@ export default function App() {
     const protocolSummary = useMemo(() => createProtocolSummary(), [])
     const selectedSession = store.sessions.find((session) => session.sessionId === store.selectedSessionId) ?? null
     const currentTimeline = selectedSession ? store.timelines[selectedSession.sessionId] ?? [] : []
+    const directProfile = selectedSession?.kind === "direct" ? store.friends[selectedSession.rawId] ?? null : null
+    const groupProfile = selectedSession?.kind === "group" ? store.groups[selectedSession.rawId] ?? null : null
 
     useEffect(() => {
         if (!isTauriRuntime()) {
@@ -32,6 +36,8 @@ export default function App() {
         })
 
         let disposed = false
+        let cleanup: (() => void) | null = null
+
         void subscribeProtocolEvents((event) => {
             if (!disposed) {
                 useSessionStore.getState().applyProtocolEvent(event)
@@ -44,7 +50,6 @@ export default function App() {
             }
         })
 
-        let cleanup: (() => void) | null = null
         return () => {
             disposed = true
             cleanup?.()
@@ -136,8 +141,12 @@ export default function App() {
                                 onClick={() => store.setSelectedSessionId(session.sessionId)}
                                 type="button"
                             >
-                                <span className="session-title">{session.title}</span>
+                                <div className="session-head-row">
+                                    <span className="session-title">{session.title}</span>
+                                    {session.unreadCount > 0 ? <span className="badge badge-unread">{session.unreadCount}</span> : null}
+                                </div>
                                 <span className="session-meta">{session.kind} · {session.subtitle}</span>
+                                {session.latestMessage ? <span className="session-preview">{session.latestMessage}</span> : null}
                             </button>
                         ))}
                     </div>
@@ -171,6 +180,42 @@ export default function App() {
                         </article>
                     ))}
                 </section>
+
+                <section className="composer-box">
+                    <textarea
+                        className="composer-input"
+                        placeholder={selectedSession ? "Type a message..." : "Select a session first"}
+                        value={store.composerText}
+                        onChange={(event) => store.setField("composerText", event.target.value)}
+                    />
+                    <div className="button-row">
+                        <button
+                            disabled={!selectedSession || !store.composerText.trim()}
+                            onClick={() =>
+                                runAction("send message", async () => {
+                                    if (!selectedSession) {
+                                        return
+                                    }
+                                    const text = store.composerText.trim()
+                                    const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19)
+                                    if (selectedSession.kind === "direct") {
+                                        const response = await sendDirectMessage(selectedSession.rawId, text)
+                                        store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
+                                        store.setLastResponse(JSON.stringify(response, null, 2))
+                                    } else {
+                                        const response = await sendGroupMessage(selectedSession.rawId, text)
+                                        store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
+                                        store.setLastResponse(JSON.stringify(response, null, 2))
+                                    }
+                                })
+                            }
+                            type="button"
+                        >
+                            Send Message
+                        </button>
+                        <button onClick={() => store.setField("composerText", "")} type="button">Clear</button>
+                    </div>
+                </section>
             </main>
 
             <aside className="panel inspector">
@@ -196,6 +241,27 @@ export default function App() {
                         const response = await setNickname(store.loggedInUserName)
                         store.setLastResponse(JSON.stringify(response, null, 2))
                     })} type="button">Update Nickname</button>
+                </section>
+
+                <section className="card-section">
+                    <p className="eyebrow">Session Card</p>
+                    {!selectedSession ? <p className="muted">Select a session to view details.</p> : null}
+                    {directProfile ? (
+                        <div className="detail-card">
+                            <strong>{directProfile.name}</strong>
+                            <span>ID: {directProfile.id}</span>
+                            <span>State: {directProfile.state}</span>
+                        </div>
+                    ) : null}
+                    {groupProfile ? (
+                        <div className="detail-card">
+                            <strong>{groupProfile.groupname}</strong>
+                            <span>ID: {groupProfile.id}</span>
+                            <span>{groupProfile.groupdesc}</span>
+                            {groupProfile.announcement ? <span>Announcement: {groupProfile.announcement}</span> : null}
+                            <span>Members: {groupProfile.users.length}</span>
+                        </div>
+                    ) : null}
                 </section>
 
                 <section className="card-section">
