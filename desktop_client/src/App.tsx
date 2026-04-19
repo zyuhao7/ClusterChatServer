@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useState } from "react"
+import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react"
 
 import {
     addFriend,
@@ -22,9 +22,17 @@ import {
     uploadAttachmentWithProgress,
     uploadAvatar,
 } from "./lib/bridge"
-import { createProtocolSummary, directSessionId, groupSessionId } from "./lib/protocol"
+import { createProtocolSummary, directSessionId, groupSessionId, type AttachmentPayload } from "./lib/protocol"
 import { isTauriRuntime } from "./lib/tauri"
 import { useSessionStore } from "./features/session/store"
+
+interface AttachmentDraft {
+    id: string
+    file: File
+    previewUrl: string
+    progress: number
+    error: string
+}
 
 function formatBytes(size: number) {
     if (size < 1024) {
@@ -52,6 +60,16 @@ function attachmentIcon(kind: "image" | "file", mime: string) {
     return "FILE"
 }
 
+function toDraft(file: File): AttachmentDraft {
+    return {
+        id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        file,
+        previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : "",
+        progress: 0,
+        error: "",
+    }
+}
+
 export default function App() {
     const store = useSessionStore()
     const [pending, setPending] = useState<string | null>(null)
@@ -65,11 +83,11 @@ export default function App() {
     const [avatarFile, setAvatarFile] = useState<File | null>(null)
     const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("")
     const [avatarFileName, setAvatarFileName] = useState("")
-    const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
-    const [attachmentName, setAttachmentName] = useState("")
-    const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState("")
-    const [attachmentProgress, setAttachmentProgress] = useState(0)
-    const [attachmentError, setAttachmentError] = useState("")
+    const [attachmentDrafts, setAttachmentDrafts] = useState<AttachmentDraft[]>([])
+    const [isDragActive, setIsDragActive] = useState(false)
+    const [lightboxAttachment, setLightboxAttachment] = useState<AttachmentPayload | null>(null)
+    const [cachedAttachments, setCachedAttachments] = useState<Record<string, string>>({})
+    const [downloadStates, setDownloadStates] = useState<Record<string, string>>({})
 
     const protocolSummary = useMemo(() => createProtocolSummary(), [])
     const sortedSessions = useMemo(() => {
@@ -160,6 +178,15 @@ export default function App() {
         }
     }
 
+    function addDraftFiles(files: FileList | File[]) {
+        const nextDrafts = Array.from(files).map(toDraft)
+        if (nextDrafts.length === 0) {
+            return
+        }
+        setAttachmentDrafts((current) => [...current, ...nextDrafts])
+        store.setLastResponse(`Selected ${nextDrafts.length} attachment(s)`) 
+    }
+
     function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0]
         if (!file) {
@@ -172,48 +199,102 @@ export default function App() {
     }
 
     function handleAttachmentChange(event: ChangeEvent<HTMLInputElement>) {
-        const file = event.target.files?.[0]
-        if (!file) {
+        if (!event.target.files) {
             return
         }
-        setAttachmentFile(file)
-        setAttachmentName(file.name)
-        setAttachmentError("")
-        setAttachmentProgress(0)
-        if (file.type.startsWith("image/")) {
-            setAttachmentPreviewUrl(URL.createObjectURL(file))
-        } else {
-            setAttachmentPreviewUrl("")
-        }
-        store.setLastResponse(`Selected attachment: ${file.name}`)
+        addDraftFiles(event.target.files)
+        event.target.value = ""
     }
 
-    async function sendCurrentMessage() {
+    function removeAttachmentDraft(draftId: string) {
+        setAttachmentDrafts((current) => current.filter((draft) => draft.id !== draftId))
+    }
+
+    function updateDraft(draftId: string, updater: (draft: AttachmentDraft) => AttachmentDraft) {
+        setAttachmentDrafts((current) => current.map((draft) => (draft.id === draftId ? updater(draft) : draft)))
+    }
+
+    function handleDragOver(event: DragEvent<HTMLDivElement>) {
+        event.preventDefault()
+        setIsDragActive(true)
+    }
+
+    function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+        event.preventDefault()
+        setIsDragActive(false)
+    }
+
+    function handleDrop(event: DragEvent<HTMLDivElement>) {
+        event.preventDefault()
+        setIsDragActive(false)
+        addDraftFiles(Array.from(event.dataTransfer.files))
+    }
+
+    async function cacheAttachment(attachment: AttachmentPayload) {
+        const cached = cachedAttachments[attachment.url]
+        if (cached) {
+            return cached
+        }
+
+        setDownloadStates((current) => ({ ...current, [attachment.url]: "downloading" }))
+        const response = await fetch(attachment.url)
+        if (!response.ok) {
+            setDownloadStates((current) => ({ ...current, [attachment.url]: "error" }))
+            throw new Error(`Download failed: ${attachment.name}`)
+        }
+        const blob = await response.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        setCachedAttachments((current) => ({ ...current, [attachment.url]: objectUrl }))
+        setDownloadStates((current) => ({ ...current, [attachment.url]: "cached" }))
+        return objectUrl
+    }
+
+    async function sendCurrentMessage(retryOnlyFailed = false) {
         if (!selectedSession) {
             return
         }
-        let text = store.composerText.trim()
-        setAttachmentError("")
-        if (attachmentFile) {
-            setAttachmentProgress(0)
-            const uploaded = await uploadAttachmentWithProgress(store.host, attachmentFile, (progress) => setAttachmentProgress(progress))
-            text = JSON.stringify(uploaded)
-            setAttachmentProgress(100)
-        }
+
         const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19)
-        if (selectedSession.kind === "direct") {
-            const response = await sendDirectMessage(selectedSession.rawId, text)
-            store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
-            store.setLastResponse(JSON.stringify(response, null, 2))
-        } else {
-            const response = await sendGroupMessage(selectedSession.rawId, text)
-            store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
-            store.setLastResponse(JSON.stringify(response, null, 2))
+        const text = store.composerText.trim()
+        if (!retryOnlyFailed && text) {
+            if (selectedSession.kind === "direct") {
+                const response = await sendDirectMessage(selectedSession.rawId, text)
+                store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
+                store.setLastResponse(JSON.stringify(response, null, 2))
+            } else {
+                const response = await sendGroupMessage(selectedSession.rawId, text)
+                store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
+                store.setLastResponse(JSON.stringify(response, null, 2))
+            }
         }
-        setAttachmentFile(null)
-        setAttachmentName("")
-        setAttachmentPreviewUrl("")
-        setAttachmentProgress(0)
+
+        const drafts = attachmentDrafts.filter((draft) => !retryOnlyFailed || draft.error)
+        for (const draft of drafts) {
+            updateDraft(draft.id, (item) => ({ ...item, error: "", progress: 0 }))
+            try {
+                const uploaded = await uploadAttachmentWithProgress(store.host, draft.file, (progress) => {
+                    updateDraft(draft.id, (item) => ({ ...item, progress }))
+                })
+                const payload = JSON.stringify(uploaded)
+                if (selectedSession.kind === "direct") {
+                    const response = await sendDirectMessage(selectedSession.rawId, payload)
+                    store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", payload, timestamp, Number(response.message_id ?? 0))
+                    store.setLastResponse(JSON.stringify(response, null, 2))
+                } else {
+                    const response = await sendGroupMessage(selectedSession.rawId, payload)
+                    store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", payload, timestamp, Number(response.message_id ?? 0))
+                    store.setLastResponse(JSON.stringify(response, null, 2))
+                }
+                removeAttachmentDraft(draft.id)
+            } catch (error) {
+                updateDraft(draft.id, (item) => ({
+                    ...item,
+                    error: error instanceof Error ? error.message : String(error),
+                    progress: 0,
+                }))
+                throw error
+            }
+        }
     }
 
     return (
@@ -272,6 +353,8 @@ export default function App() {
                                     setAvatarFile(null)
                                     setAvatarPreviewUrl("")
                                     setAvatarFileName("")
+                                    setAttachmentDrafts([])
+                                    setLightboxAttachment(null)
                                     store.setLastResponse(JSON.stringify(response, null, 2))
                                 })
                             }
@@ -367,9 +450,31 @@ export default function App() {
                                         </div>
                                     </div>
                                     {entry.attachment.kind === "image" ? (
-                                        <img alt={entry.attachment.name} className="attachment-image" src={entry.attachment.url} />
+                                        <img
+                                            alt={entry.attachment.name}
+                                            className="attachment-image clickable"
+                                            onClick={() => setLightboxAttachment(entry.attachment ?? null)}
+                                            src={cachedAttachments[entry.attachment.url] ?? entry.attachment.url}
+                                        />
                                     ) : null}
-                                    <a href={entry.attachment.url} rel="noreferrer" target="_blank">Open attachment</a>
+                                    <div className="button-row compact-row">
+                                        <button
+                                            onClick={() =>
+                                                runAction("download attachment", async () => {
+                                                    const url = await cacheAttachment(entry.attachment!)
+                                                    window.open(url, "_blank", "noopener,noreferrer")
+                                                })
+                                            }
+                                            type="button"
+                                        >
+                                            {downloadStates[entry.attachment.url] === "cached" ? "Open Cached" : "Download"}
+                                        </button>
+                                        {entry.attachment.kind === "image" ? (
+                                            <button onClick={() => setLightboxAttachment(entry.attachment ?? null)} type="button">Preview</button>
+                                        ) : null}
+                                    </div>
+                                    {downloadStates[entry.attachment.url] === "downloading" ? <span className="muted">Downloading...</span> : null}
+                                    {downloadStates[entry.attachment.url] === "error" ? <span className="error-text">Download failed</span> : null}
                                 </div>
                             ) : (
                                 <p>{entry.body}</p>
@@ -378,30 +483,28 @@ export default function App() {
                     ))}
                 </section>
 
-                <section className="composer-box">
+                <section
+                    className={isDragActive ? "composer-box composer-box-active" : "composer-box"}
+                    onDragLeave={handleDragLeave}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                >
                     <textarea
                         className="composer-input"
-                        placeholder={selectedSession ? "Type a message..." : "Select a session first"}
+                        placeholder={selectedSession ? "Type a message or drop files here..." : "Select a session first"}
                         value={store.composerText}
                         onChange={(event) => store.setField("composerText", event.target.value)}
                     />
                     <div className="button-row">
                         <label className="button-like">
-                            <span>Choose Attachment</span>
-                            <input className="hidden-input" type="file" onChange={handleAttachmentChange} />
+                            <span>Choose Attachments</span>
+                            <input className="hidden-input" multiple type="file" onChange={handleAttachmentChange} />
                         </label>
                         <button
-                            disabled={!selectedSession || (!store.composerText.trim() && !attachmentFile)}
+                            disabled={!selectedSession || (!store.composerText.trim() && attachmentDrafts.length === 0)}
                             onClick={() =>
                                 runAction("send message", async () => {
-                                    try {
-                                        await sendCurrentMessage()
-                                    } catch (error) {
-                                        if (attachmentFile) {
-                                            setAttachmentError(error instanceof Error ? error.message : String(error))
-                                        }
-                                        throw error
-                                    }
+                                    await sendCurrentMessage()
                                 })
                             }
                             type="button"
@@ -410,21 +513,31 @@ export default function App() {
                         </button>
                         <button onClick={() => store.setField("composerText", "")} type="button">Clear</button>
                         <button
-                            disabled={!selectedSession || !attachmentFile || !attachmentError}
+                            disabled={!selectedSession || attachmentDrafts.every((draft) => !draft.error)}
                             onClick={() =>
                                 runAction("retry attachment", async () => {
-                                    await sendCurrentMessage()
+                                    await sendCurrentMessage(true)
                                 })
                             }
                             type="button"
                         >
-                            Retry Attachment
+                            Retry Failed
                         </button>
                     </div>
-                    {attachmentName ? <p className="muted">Attachment ready: {attachmentName}</p> : null}
-                    {attachmentFile ? <p className="muted">Upload progress: {attachmentProgress}%</p> : null}
-                    {attachmentPreviewUrl ? <img alt="attachment preview" className="attachment-image attachment-preview" src={attachmentPreviewUrl} /> : null}
-                    {attachmentError ? <p className="error-text">Attachment error: {attachmentError}</p> : null}
+                    {attachmentDrafts.length > 0 ? (
+                        <div className="draft-grid">
+                            {attachmentDrafts.map((draft) => (
+                                <div key={draft.id} className="draft-card">
+                                    {draft.previewUrl ? <img alt={draft.file.name} className="draft-image" src={draft.previewUrl} /> : null}
+                                    <strong>{draft.file.name}</strong>
+                                    <span>{formatBytes(draft.file.size)}</span>
+                                    <span>{draft.progress > 0 ? `Upload ${draft.progress}%` : "Waiting"}</span>
+                                    {draft.error ? <span className="error-text">{draft.error}</span> : null}
+                                    <button onClick={() => removeAttachmentDraft(draft.id)} type="button">Remove</button>
+                                </div>
+                            ))}
+                        </div>
+                    ) : null}
                 </section>
             </main>
 
@@ -652,6 +765,18 @@ export default function App() {
                     <pre className="protocol-box">{store.lastResponse || "No response yet."}</pre>
                 </section>
             </aside>
+
+            {lightboxAttachment ? (
+                <div className="lightbox" onClick={() => setLightboxAttachment(null)} role="presentation">
+                    <div className="lightbox-content" onClick={(event) => event.stopPropagation()} role="presentation">
+                        <div className="button-row">
+                            <strong>{lightboxAttachment.name}</strong>
+                            <button onClick={() => setLightboxAttachment(null)} type="button">Close</button>
+                        </div>
+                        <img alt={lightboxAttachment.name} className="lightbox-image" src={cachedAttachments[lightboxAttachment.url] ?? lightboxAttachment.url} />
+                    </div>
+                </div>
+            ) : null}
         </div>
     )
 }

@@ -359,14 +359,18 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
         })),
     appendLocalMessage: (sessionId, author, body, timestamp, messageId) =>
         set((state) => {
-            const item: TimelineItem = {
-                id: `${sessionId}-${messageId ?? Date.now()}`,
+            const item = toTimelineItem(
+                {
+                    version: 1,
+                    msgid: sessionId.startsWith("group-") ? 15 : 7,
+                    message_id: messageId,
+                    name: author,
+                    msg: body,
+                    time: timestamp,
+                },
                 sessionId,
                 author,
-                body,
-                timestamp,
-                messageId,
-            }
+            )
             const timelines = appendTimelineItem(state.timelines, item)
             const preview = sessionPreviewFromTimeline(timelines[sessionId] ?? [])
             return {
