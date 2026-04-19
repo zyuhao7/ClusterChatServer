@@ -19,12 +19,38 @@ import {
     setNickname,
     setPresence,
     subscribeProtocolEvents,
-    uploadAttachment,
+    uploadAttachmentWithProgress,
     uploadAvatar,
 } from "./lib/bridge"
 import { createProtocolSummary, directSessionId, groupSessionId } from "./lib/protocol"
 import { isTauriRuntime } from "./lib/tauri"
 import { useSessionStore } from "./features/session/store"
+
+function formatBytes(size: number) {
+    if (size < 1024) {
+        return `${size} B`
+    }
+    if (size < 1024 * 1024) {
+        return `${(size / 1024).toFixed(1)} KB`
+    }
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function attachmentIcon(kind: "image" | "file", mime: string) {
+    if (kind === "image") {
+        return "IMG"
+    }
+    if (mime.includes("pdf")) {
+        return "PDF"
+    }
+    if (mime.includes("zip") || mime.includes("compressed")) {
+        return "ZIP"
+    }
+    if (mime.includes("text")) {
+        return "TXT"
+    }
+    return "FILE"
+}
 
 export default function App() {
     const store = useSessionStore()
@@ -41,6 +67,9 @@ export default function App() {
     const [avatarFileName, setAvatarFileName] = useState("")
     const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
     const [attachmentName, setAttachmentName] = useState("")
+    const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState("")
+    const [attachmentProgress, setAttachmentProgress] = useState(0)
+    const [attachmentError, setAttachmentError] = useState("")
 
     const protocolSummary = useMemo(() => createProtocolSummary(), [])
     const sortedSessions = useMemo(() => {
@@ -149,7 +178,42 @@ export default function App() {
         }
         setAttachmentFile(file)
         setAttachmentName(file.name)
+        setAttachmentError("")
+        setAttachmentProgress(0)
+        if (file.type.startsWith("image/")) {
+            setAttachmentPreviewUrl(URL.createObjectURL(file))
+        } else {
+            setAttachmentPreviewUrl("")
+        }
         store.setLastResponse(`Selected attachment: ${file.name}`)
+    }
+
+    async function sendCurrentMessage() {
+        if (!selectedSession) {
+            return
+        }
+        let text = store.composerText.trim()
+        setAttachmentError("")
+        if (attachmentFile) {
+            setAttachmentProgress(0)
+            const uploaded = await uploadAttachmentWithProgress(store.host, attachmentFile, (progress) => setAttachmentProgress(progress))
+            text = JSON.stringify(uploaded)
+            setAttachmentProgress(100)
+        }
+        const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19)
+        if (selectedSession.kind === "direct") {
+            const response = await sendDirectMessage(selectedSession.rawId, text)
+            store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
+            store.setLastResponse(JSON.stringify(response, null, 2))
+        } else {
+            const response = await sendGroupMessage(selectedSession.rawId, text)
+            store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
+            store.setLastResponse(JSON.stringify(response, null, 2))
+        }
+        setAttachmentFile(null)
+        setAttachmentName("")
+        setAttachmentPreviewUrl("")
+        setAttachmentProgress(0)
     }
 
     return (
@@ -295,8 +359,13 @@ export default function App() {
                             </div>
                             {entry.attachment ? (
                                 <div className="attachment-card">
-                                    <strong>{entry.attachment.name}</strong>
-                                    <span>{entry.attachment.mime}</span>
+                                    <div className="attachment-head">
+                                        <span className="attachment-icon">{attachmentIcon(entry.attachment.kind, entry.attachment.mime)}</span>
+                                        <div className="attachment-meta">
+                                            <strong>{entry.attachment.name}</strong>
+                                            <span>{entry.attachment.mime} · {formatBytes(entry.attachment.size)}</span>
+                                        </div>
+                                    </div>
                                     {entry.attachment.kind === "image" ? (
                                         <img alt={entry.attachment.name} className="attachment-image" src={entry.attachment.url} />
                                     ) : null}
@@ -325,26 +394,14 @@ export default function App() {
                             disabled={!selectedSession || (!store.composerText.trim() && !attachmentFile)}
                             onClick={() =>
                                 runAction("send message", async () => {
-                                    if (!selectedSession) {
-                                        return
+                                    try {
+                                        await sendCurrentMessage()
+                                    } catch (error) {
+                                        if (attachmentFile) {
+                                            setAttachmentError(error instanceof Error ? error.message : String(error))
+                                        }
+                                        throw error
                                     }
-                                    let text = store.composerText.trim()
-                                    if (attachmentFile) {
-                                        const uploaded = await uploadAttachment(store.host, attachmentFile)
-                                        text = JSON.stringify(uploaded)
-                                    }
-                                    const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19)
-                                    if (selectedSession.kind === "direct") {
-                                        const response = await sendDirectMessage(selectedSession.rawId, text)
-                                        store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
-                                        store.setLastResponse(JSON.stringify(response, null, 2))
-                                    } else {
-                                        const response = await sendGroupMessage(selectedSession.rawId, text)
-                                        store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
-                                        store.setLastResponse(JSON.stringify(response, null, 2))
-                                    }
-                                    setAttachmentFile(null)
-                                    setAttachmentName("")
                                 })
                             }
                             type="button"
@@ -352,8 +409,22 @@ export default function App() {
                             Send Message
                         </button>
                         <button onClick={() => store.setField("composerText", "")} type="button">Clear</button>
+                        <button
+                            disabled={!selectedSession || !attachmentFile || !attachmentError}
+                            onClick={() =>
+                                runAction("retry attachment", async () => {
+                                    await sendCurrentMessage()
+                                })
+                            }
+                            type="button"
+                        >
+                            Retry Attachment
+                        </button>
                     </div>
                     {attachmentName ? <p className="muted">Attachment ready: {attachmentName}</p> : null}
+                    {attachmentFile ? <p className="muted">Upload progress: {attachmentProgress}%</p> : null}
+                    {attachmentPreviewUrl ? <img alt="attachment preview" className="attachment-image attachment-preview" src={attachmentPreviewUrl} /> : null}
+                    {attachmentError ? <p className="error-text">Attachment error: {attachmentError}</p> : null}
                 </section>
             </main>
 

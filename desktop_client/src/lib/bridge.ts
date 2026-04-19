@@ -141,15 +141,33 @@ export async function uploadAvatar(host: string, userId: number, file: File) {
 }
 
 export async function uploadAttachment(host: string, file: File) {
-    const form = new FormData()
-    form.append("attachment", file)
-    const response = await fetch(`${adminBaseUrl(host)}/api/v1/uploads/attachments`, {
-        method: "POST",
-        body: form,
+    return uploadAttachmentWithProgress(host, file)
+}
+
+export function uploadAttachmentWithProgress(host: string, file: File, onProgress?: (progress: number) => void) {
+    return new Promise<{ kind: "image" | "file"; url: string; name: string; mime: string; size: number }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        const form = new FormData()
+        form.append("attachment", file)
+
+        xhr.open("POST", `${adminBaseUrl(host)}/api/v1/uploads/attachments`)
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && onProgress) {
+                onProgress(Math.round((event.loaded / event.total) * 100))
+            }
+        }
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    resolve(JSON.parse(xhr.responseText) as { kind: "image" | "file"; url: string; name: string; mime: string; size: number })
+                } catch (error) {
+                    reject(error)
+                }
+                return
+            }
+            reject(new Error(xhr.responseText || "Attachment upload failed"))
+        }
+        xhr.onerror = () => reject(new Error("Attachment upload failed"))
+        xhr.send(form)
     })
-    if (!response.ok) {
-        const detail = await response.text()
-        throw new Error(detail || "Attachment upload failed")
-    }
-    return response.json() as Promise<{ kind: "image" | "file"; url: string; name: string; mime: string; size: number }>
 }
