@@ -262,6 +262,26 @@ button {
     background: rgba(2, 6, 23, 0.72);
 }
 
+.member-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 220px;
+    overflow: auto;
+}
+
+.member-card {
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.avatar-preview {
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border-radius: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
 .message-head {
     display: flex;
     justify-content: space-between;

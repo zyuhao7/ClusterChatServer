@@ -34,6 +34,36 @@ export async function setNickname(name: string) {
     return assertOk(payload)
 }
 
+export async function addFriend(friendId: number) {
+    const payload = await invoke<BridgeResponse>("add_friend", { friendId })
+    return assertOk(payload)
+}
+
+export async function createGroup(groupName: string, groupDesc: string) {
+    const payload = await invoke<BridgeResponse>("create_group", { groupName, groupDesc })
+    return assertOk(payload)
+}
+
+export async function joinGroup(groupId: number) {
+    const payload = await invoke<BridgeResponse>("join_group", { groupId })
+    return assertOk(payload)
+}
+
+export async function setGroupAnnouncement(groupId: number, announcement: string) {
+    const payload = await invoke<BridgeResponse>("set_group_announcement", { groupId, announcement })
+    return assertOk(payload)
+}
+
+export async function muteGroupMember(groupId: number, targetId: number, minutes: number) {
+    const payload = await invoke<BridgeResponse>("mute_group_member", { groupId, targetId, minutes })
+    return assertOk(payload)
+}
+
+export async function kickGroupMember(groupId: number, targetId: number) {
+    const payload = await invoke<BridgeResponse>("kick_group_member", { groupId, targetId })
+    return assertOk(payload)
+}
+
 export async function sendDirectMessage(targetId: number, message: string) {
     const payload = await invoke<BridgeResponse>("send_direct_message", { targetId, message })
     return assertOk(payload)

@@ -50,6 +50,11 @@ interface SessionStoreState {
     replaceHistory: (sessionId: string, entries: HistoryEntry[]) => void
     applyProtocolEvent: (event: ProtocolPushEvent) => void
     upsertSearchSession: (user: SearchUserEntry) => void
+    markFriend: (user: SearchUserEntry) => void
+    upsertGroupSession: (groupId: number, name: string, desc: string) => void
+    updateGroupAnnouncement: (groupId: number, announcement: string) => void
+    updateGroupMemberMute: (groupId: number, targetId: number, mutedUntil: string) => void
+    removeGroupMember: (groupId: number, targetId: number) => void
     appendLocalMessage: (sessionId: string, author: string, body: string, timestamp: string, messageId?: number) => void
     resetSession: () => void
 }
@@ -216,6 +221,93 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                 selectedSessionId: sessionId,
             }
         }),
+    markFriend: (user) =>
+        set((state) => ({
+            friends: {
+                ...state.friends,
+                [user.id]: { id: user.id, name: user.name, state: user.state },
+            },
+            sessions: updateSessionMeta(state.sessions, directSessionId(user.id), (session) => ({
+                ...session,
+                subtitle: `friend · ${user.state}`,
+            })),
+        })),
+    upsertGroupSession: (groupId, name, desc) =>
+        set((state) => {
+            const sessionId = groupSessionId(groupId)
+            const sessions = state.sessions.some((session) => session.sessionId === sessionId)
+                ? state.sessions
+                : [
+                    ...state.sessions,
+                    {
+                        sessionId,
+                        rawId: groupId,
+                        title: name,
+                        kind: "group" as const,
+                        presence: "group",
+                        subtitle: desc || "group",
+                        unreadCount: 0,
+                        latestMessage: "",
+                        latestTimestamp: "",
+                    },
+                ]
+            return {
+                sessions,
+                groups: {
+                    ...state.groups,
+                    [groupId]: {
+                        id: groupId,
+                        groupname: name,
+                        groupdesc: desc,
+                        users: state.groups[groupId]?.users ?? [],
+                        announcement: state.groups[groupId]?.announcement,
+                    },
+                },
+                selectedSessionId: sessionId,
+            }
+        }),
+    updateGroupAnnouncement: (groupId, announcement) =>
+        set((state) => ({
+            groups: state.groups[groupId]
+                ? {
+                    ...state.groups,
+                    [groupId]: {
+                        ...state.groups[groupId],
+                        announcement,
+                    },
+                }
+                : state.groups,
+            sessions: updateSessionMeta(state.sessions, groupSessionId(groupId), (session) => ({
+                ...session,
+                subtitle: announcement,
+            })),
+        })),
+    updateGroupMemberMute: (groupId, targetId, mutedUntil) =>
+        set((state) => ({
+            groups: state.groups[groupId]
+                ? {
+                    ...state.groups,
+                    [groupId]: {
+                        ...state.groups[groupId],
+                        users: state.groups[groupId].users.map((user) =>
+                            user.id === targetId ? { ...user, muted_until: mutedUntil } : user,
+                        ),
+                    },
+                }
+                : state.groups,
+        })),
+    removeGroupMember: (groupId, targetId) =>
+        set((state) => ({
+            groups: state.groups[groupId]
+                ? {
+                    ...state.groups,
+                    [groupId]: {
+                        ...state.groups[groupId],
+                        users: state.groups[groupId].users.filter((user) => user.id !== targetId),
+                    },
+                }
+                : state.groups,
+        })),
     appendLocalMessage: (sessionId, author, body, timestamp, messageId) =>
         set((state) => {
             const item: TimelineItem = {

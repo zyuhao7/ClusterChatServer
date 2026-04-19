@@ -1,14 +1,20 @@
-import { useEffect, useMemo, useState } from "react"
+import { ChangeEvent, useEffect, useMemo, useState } from "react"
 
 import {
+    addFriend,
+    createGroup,
+    joinGroup,
+    kickGroupMember,
     login,
     logout,
+    muteGroupMember,
     queryDirectHistory,
     queryGroupHistory,
     searchUsers,
     sendDirectMessage,
     sendGroupMessage,
     sessionInfo,
+    setGroupAnnouncement,
     setNickname,
     setPresence,
     subscribeProtocolEvents,
@@ -20,6 +26,16 @@ import { useSessionStore } from "./features/session/store"
 export default function App() {
     const store = useSessionStore()
     const [pending, setPending] = useState<string | null>(null)
+    const [newGroupName, setNewGroupName] = useState("")
+    const [newGroupDesc, setNewGroupDesc] = useState("")
+    const [joinGroupId, setJoinGroupId] = useState("")
+    const [announcementDraft, setAnnouncementDraft] = useState("")
+    const [muteTargetId, setMuteTargetId] = useState("")
+    const [muteMinutes, setMuteMinutes] = useState("10")
+    const [kickTargetId, setKickTargetId] = useState("")
+    const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("")
+    const [avatarFileName, setAvatarFileName] = useState("")
+
     const protocolSummary = useMemo(() => createProtocolSummary(), [])
     const selectedSession = store.sessions.find((session) => session.sessionId === store.selectedSessionId) ?? null
     const currentTimeline = selectedSession ? store.timelines[selectedSession.sessionId] ?? [] : []
@@ -56,6 +72,12 @@ export default function App() {
         }
     }, [])
 
+    useEffect(() => {
+        if (groupProfile) {
+            setAnnouncementDraft(groupProfile.announcement ?? "")
+        }
+    }, [groupProfile?.id, groupProfile?.announcement])
+
     async function runAction(label: string, action: () => Promise<void>) {
         setPending(label)
         try {
@@ -65,6 +87,16 @@ export default function App() {
         } finally {
             setPending(null)
         }
+    }
+
+    function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0]
+        if (!file) {
+            return
+        }
+        setAvatarFileName(file.name)
+        setAvatarPreviewUrl(URL.createObjectURL(file))
+        store.setLastResponse(`Selected avatar draft: ${file.name}`)
     }
 
     return (
@@ -120,6 +152,8 @@ export default function App() {
                                 runAction("logout", async () => {
                                     const response = await logout()
                                     store.resetSession()
+                                    setAvatarPreviewUrl("")
+                                    setAvatarFileName("")
                                     store.setLastResponse(JSON.stringify(response, null, 2))
                                 })
                             }
@@ -150,6 +184,32 @@ export default function App() {
                             </button>
                         ))}
                     </div>
+                </section>
+
+                <section className="card-section">
+                    <p className="eyebrow">Create Or Join Group</p>
+                    <label className="field">
+                        <span>Group name</span>
+                        <input value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} />
+                    </label>
+                    <label className="field">
+                        <span>Group description</span>
+                        <input value={newGroupDesc} onChange={(event) => setNewGroupDesc(event.target.value)} />
+                    </label>
+                    <button onClick={() => runAction("create group", async () => {
+                        const response = await createGroup(newGroupName, newGroupDesc)
+                        store.upsertGroupSession(Number(response.groupid), newGroupName || `Group ${response.groupid}`, newGroupDesc)
+                        store.setLastResponse(JSON.stringify(response, null, 2))
+                    })} type="button">Create Group</button>
+                    <label className="field">
+                        <span>Join group id</span>
+                        <input value={joinGroupId} onChange={(event) => setJoinGroupId(event.target.value)} />
+                    </label>
+                    <button onClick={() => runAction("join group", async () => {
+                        const response = await joinGroup(Number(joinGroupId))
+                        store.upsertGroupSession(Number(joinGroupId), `Group ${joinGroupId}`, "joined group")
+                        store.setLastResponse(JSON.stringify(response, null, 2))
+                    })} type="button">Join Group</button>
                 </section>
             </aside>
 
@@ -241,6 +301,12 @@ export default function App() {
                         const response = await setNickname(store.loggedInUserName)
                         store.setLastResponse(JSON.stringify(response, null, 2))
                     })} type="button">Update Nickname</button>
+                    <label className="field">
+                        <span>Avatar draft</span>
+                        <input type="file" accept="image/*" onChange={handleAvatarChange} />
+                    </label>
+                    {avatarPreviewUrl ? <img alt="avatar preview" className="avatar-preview" src={avatarPreviewUrl} /> : null}
+                    {avatarFileName ? <p className="muted">Selected file: {avatarFileName}</p> : null}
                 </section>
 
                 <section className="card-section">
@@ -251,6 +317,18 @@ export default function App() {
                             <strong>{directProfile.name}</strong>
                             <span>ID: {directProfile.id}</span>
                             <span>State: {directProfile.state}</span>
+                            <button onClick={() => runAction("add friend", async () => {
+                                const response = await addFriend(directProfile.id)
+                                store.markFriend({
+                                    id: directProfile.id,
+                                    name: directProfile.name,
+                                    state: directProfile.state,
+                                    is_friend: true,
+                                    has_blocked: false,
+                                    blocked_by_target: false,
+                                })
+                                store.setLastResponse(JSON.stringify(response, null, 2))
+                            })} type="button">Add Friend</button>
                         </div>
                     ) : null}
                     {groupProfile ? (
@@ -283,11 +361,63 @@ export default function App() {
                                 <span>friend: {String(user.is_friend)}</span>
                                 <div className="button-row compact-row">
                                     <button onClick={() => store.upsertSearchSession(user)} type="button">Open Session</button>
+                                    <button onClick={() => runAction("add friend", async () => {
+                                        const response = await addFriend(user.id)
+                                        store.markFriend(user)
+                                        store.setLastResponse(JSON.stringify(response, null, 2))
+                                    })} type="button">Add Friend</button>
                                 </div>
                             </article>
                         ))}
                     </div>
                 </section>
+
+                {groupProfile ? (
+                    <section className="card-section">
+                        <p className="eyebrow">Group Moderation</p>
+                        <label className="field">
+                            <span>Announcement</span>
+                            <textarea value={announcementDraft} onChange={(event) => setAnnouncementDraft(event.target.value)} />
+                        </label>
+                        <button onClick={() => runAction("set announcement", async () => {
+                            const response = await setGroupAnnouncement(groupProfile.id, announcementDraft)
+                            store.updateGroupAnnouncement(groupProfile.id, announcementDraft)
+                            store.setLastResponse(JSON.stringify(response, null, 2))
+                        })} type="button">Update Announcement</button>
+                        <div className="member-list">
+                            {groupProfile.users.map((member) => (
+                                <div key={member.id} className="detail-card member-card">
+                                    <strong>{member.name}</strong>
+                                    <span>ID: {member.id}</span>
+                                    <span>Role: {member.role}</span>
+                                    {member.muted_until ? <span>Muted until: {member.muted_until}</span> : null}
+                                </div>
+                            ))}
+                        </div>
+                        <label className="field">
+                            <span>Mute target ID</span>
+                            <input value={muteTargetId} onChange={(event) => setMuteTargetId(event.target.value)} />
+                        </label>
+                        <label className="field">
+                            <span>Minutes</span>
+                            <input value={muteMinutes} onChange={(event) => setMuteMinutes(event.target.value)} />
+                        </label>
+                        <button onClick={() => runAction("mute member", async () => {
+                            const response = await muteGroupMember(groupProfile.id, Number(muteTargetId), Number(muteMinutes))
+                            store.updateGroupMemberMute(groupProfile.id, Number(muteTargetId), String(response.muted_until ?? ""))
+                            store.setLastResponse(JSON.stringify(response, null, 2))
+                        })} type="button">Mute Member</button>
+                        <label className="field">
+                            <span>Kick target ID</span>
+                            <input value={kickTargetId} onChange={(event) => setKickTargetId(event.target.value)} />
+                        </label>
+                        <button onClick={() => runAction("kick member", async () => {
+                            const response = await kickGroupMember(groupProfile.id, Number(kickTargetId))
+                            store.removeGroupMember(groupProfile.id, Number(kickTargetId))
+                            store.setLastResponse(JSON.stringify(response, null, 2))
+                        })} type="button">Kick Member</button>
+                    </section>
+                ) : null}
 
                 <section className="card-section">
                     <p className="eyebrow">History Sync</p>
