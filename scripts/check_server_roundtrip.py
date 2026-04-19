@@ -13,6 +13,7 @@ ERR_AUTH_ALREADY_ONLINE = 4102
 ERR_AUTH_BANNED = 4103
 ERR_GROUP_USER_NOT_FOUND = 4401
 ERR_GROUP_CANNOT_CHANGE_CREATOR_ROLE = 4413
+ERR_GROUP_ADMIN_CANNOT_GRANT_ADMIN = 4418
 ERR_USER_BLOCKED_RELATION = 4608
 
 
@@ -201,6 +202,7 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
     password = "codex_pass_123"
     creator_name = f"group_creator_{now}"
     member_name = f"group_member_{now}"
+    extra_name = f"group_extra_{now}"
     protocol_version = 1
     login_msg = 1
     reg_msg = 5
@@ -209,6 +211,7 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
     set_role_msg = 19
     creator_id = -1
     member_id = -1
+    extra_id = -1
 
     creator_reg = {
         "version": protocol_version,
@@ -238,6 +241,20 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
         return 21
     member_id = member_resp["id"]
 
+    extra_reg = {
+        "version": protocol_version,
+        "msgid": reg_msg,
+        "request_id": f"group-reg-e-{now}",
+        "name": extra_name,
+        "password": password,
+    }
+    sock.sendall(json.dumps(extra_reg).encode("utf-8"))
+    extra_resp = recv_json(sock)
+    print("GROUP_REG_EXTRA", extra_resp)
+    if extra_resp.get("errno") != ERR_OK:
+        return 22
+    extra_id = extra_resp["id"]
+
     try:
         invalid_create_req = {
             "version": protocol_version,
@@ -251,7 +268,7 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
         invalid_create_resp = recv_json(sock)
         print("GROUP_INVALID_CREATE", invalid_create_resp)
         if invalid_create_resp.get("errno") != ERR_GROUP_USER_NOT_FOUND:
-            return 22
+            return 23
 
         creator_login_req = {
             "version": protocol_version,
@@ -264,7 +281,7 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
         creator_login_resp = recv_json(sock)
         print("GROUP_LOGIN_CREATOR", creator_login_resp)
         if creator_login_resp.get("errno") != ERR_OK:
-            return 23
+            return 24
 
         create_req = {
             "version": protocol_version,
@@ -278,10 +295,10 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
         create_resp = recv_json(sock)
         print("GROUP_CREATE", create_resp)
         if create_resp.get("errno") != ERR_OK:
-            return 24
+            return 25
         group_id = create_resp.get("groupid")
         if not group_id:
-            return 25
+            return 26
 
         member_login_req = {
             "version": protocol_version,
@@ -294,7 +311,20 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
         member_login_resp = recv_json(sock)
         print("GROUP_LOGIN_MEMBER", member_login_resp)
         if member_login_resp.get("errno") != ERR_OK:
-            return 26
+            return 27
+
+        extra_login_req = {
+            "version": protocol_version,
+            "msgid": login_msg,
+            "request_id": f"group-login-e-{now}",
+            "id": extra_id,
+            "password": password,
+        }
+        sock.sendall(json.dumps(extra_login_req).encode("utf-8"))
+        extra_login_resp = recv_json(sock)
+        print("GROUP_LOGIN_EXTRA", extra_login_resp)
+        if extra_login_resp.get("errno") != ERR_OK:
+            return 28
 
         add_group_req = {
             "version": protocol_version,
@@ -307,7 +337,35 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
         add_group_resp = recv_json(sock)
         print("GROUP_JOIN", add_group_resp)
         if add_group_resp.get("errno") != ERR_OK:
-            return 27
+            return 29
+
+        add_extra_req = {
+            "version": protocol_version,
+            "msgid": add_group_msg,
+            "request_id": f"group-join-extra-{now}",
+            "id": extra_id,
+            "groupid": group_id,
+        }
+        sock.sendall(json.dumps(add_extra_req).encode("utf-8"))
+        add_extra_resp = recv_json(sock)
+        print("GROUP_JOIN_EXTRA", add_extra_resp)
+        if add_extra_resp.get("errno") != ERR_OK:
+            return 30
+
+        promote_admin_req = {
+            "version": protocol_version,
+            "msgid": set_role_msg,
+            "request_id": f"group-promote-admin-{now}",
+            "id": creator_id,
+            "groupid": group_id,
+            "targetid": member_id,
+            "role": "admin",
+        }
+        sock.sendall(json.dumps(promote_admin_req).encode("utf-8"))
+        promote_admin_resp = recv_json(sock)
+        print("GROUP_PROMOTE_ADMIN", promote_admin_resp)
+        if promote_admin_resp.get("errno") != ERR_OK:
+            return 31
 
         set_creator_role_req = {
             "version": protocol_version,
@@ -322,22 +380,62 @@ def verify_group_permission_checks(sock: socket.socket, now: int, args: argparse
         set_creator_role_resp = recv_json(sock)
         print("GROUP_SETROLE_CREATOR", set_creator_role_resp)
         if set_creator_role_resp.get("errno") != ERR_GROUP_CANNOT_CHANGE_CREATOR_ROLE:
-            return 28
+            return 32
+
+        admin_downgrade_req = {
+            "version": protocol_version,
+            "msgid": set_role_msg,
+            "request_id": f"group-admin-downgrade-{now}",
+            "id": member_id,
+            "groupid": group_id,
+            "targetid": extra_id,
+            "role": "normal",
+        }
+        sock.sendall(json.dumps(admin_downgrade_req).encode("utf-8"))
+        admin_downgrade_resp = recv_json(sock)
+        print("GROUP_ADMIN_DOWNGRADE", admin_downgrade_resp)
+        if admin_downgrade_resp.get("errno") != ERR_OK:
+            return 33
+
+        admin_promote_req = {
+            "version": protocol_version,
+            "msgid": set_role_msg,
+            "request_id": f"group-admin-promote-{now}",
+            "id": member_id,
+            "groupid": group_id,
+            "targetid": extra_id,
+            "role": "admin",
+        }
+        sock.sendall(json.dumps(admin_promote_req).encode("utf-8"))
+        admin_promote_resp = recv_json(sock)
+        print("GROUP_ADMIN_PROMOTE", admin_promote_resp)
+        if admin_promote_resp.get("errno") != ERR_GROUP_ADMIN_CANNOT_GRANT_ADMIN:
+            return 34
 
         role_rows = mysql_query_lines(
             f"SELECT grouprole FROM groupuser WHERE groupid = {group_id} AND userid = {creator_id};",
             args,
         )
         if not role_rows or role_rows[0] != "creator":
-            return 29
+            return 35
+        admin_role_rows = mysql_query_lines(
+            f"SELECT grouprole FROM groupuser WHERE groupid = {group_id} AND userid = {member_id};",
+            args,
+        )
+        if not admin_role_rows or admin_role_rows[0] != "admin":
+            return 36
         return 0
     finally:
-        if creator_id > 0 and member_id > 0:
+        if creator_id > 0 and member_id > 0 and extra_id > 0:
+            mysql_query_lines(f"DELETE FROM user WHERE id IN ({creator_id}, {member_id}, {extra_id});", args)
+        elif creator_id > 0 and member_id > 0:
             mysql_query_lines(f"DELETE FROM user WHERE id IN ({creator_id}, {member_id});", args)
         elif creator_id > 0:
             mysql_query_lines(f"DELETE FROM user WHERE id = {creator_id};", args)
         elif member_id > 0:
             mysql_query_lines(f"DELETE FROM user WHERE id = {member_id};", args)
+        elif extra_id > 0:
+            mysql_query_lines(f"DELETE FROM user WHERE id = {extra_id};", args)
 
 
 def verify_history_pagination(sock: socket.socket, now: int, args: argparse.Namespace) -> int:

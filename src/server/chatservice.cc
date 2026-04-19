@@ -547,6 +547,7 @@ void ChatService::setGroupRole(const TcpConnectionPtr &conn, json &js, Timestamp
     int groupid = js["groupid"].get<int>();
     int target_id = js["targetid"].get<int>();
     string target_role = js["role"].get<string>();
+    string operator_role = _groupModal.QueryUserRole(operator_id, groupid);
 
     if (target_role != "normal" && target_role != "admin")
     {
@@ -558,9 +559,9 @@ void ChatService::setGroupRole(const TcpConnectionPtr &conn, json &js, Timestamp
         sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, ERR_GROUP_NOT_FOUND, "群组不存在");
         return;
     }
-    if (_groupModal.QueryUserRole(operator_id, groupid) != "creator")
+    if (operator_role != "creator" && operator_role != "admin")
     {
-        sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, ERR_GROUP_ONLY_CREATOR_CAN_SET_ROLE, "仅群主可修改角色");
+        sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, ERR_GROUP_ROLE_PERMISSION_DENIED, "仅群主或管理员可修改角色");
         return;
     }
     if (!_groupModal.IsUserInGroup(target_id, groupid))
@@ -571,6 +572,11 @@ void ChatService::setGroupRole(const TcpConnectionPtr &conn, json &js, Timestamp
     if (_groupModal.QueryUserRole(target_id, groupid) == "creator")
     {
         sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, ERR_GROUP_CANNOT_CHANGE_CREATOR_ROLE, "不能修改群主角色");
+        return;
+    }
+    if (operator_role == "admin" && target_role != "normal")
+    {
+        sendAck(conn, SET_GROUP_ROLE_MSG_ACK, request_id, ERR_GROUP_ADMIN_CANNOT_GRANT_ADMIN, "管理员不能授予管理员角色");
         return;
     }
     if (_groupModal.UpdateUserRole(target_id, groupid, target_role))
