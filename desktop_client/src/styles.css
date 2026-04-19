@@ -22,6 +22,28 @@ button {
     font: inherit;
 }
 
+input,
+select,
+button,
+textarea {
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.9);
+    color: inherit;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    padding: 10px 12px;
+}
+
+button {
+    padding: 10px 14px;
+    cursor: pointer;
+}
+
 #root {
     min-height: 100vh;
 }
@@ -55,6 +77,51 @@ button {
     flex-direction: column;
     gap: 18px;
     padding: 24px;
+}
+
+.action-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.card-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px;
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+    color: #cbd5e1;
+}
+
+.button-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.result-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.result-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(2, 6, 23, 0.72);
 }
 
 .hero {
@@ -165,6 +232,10 @@ button {
 @media (max-width: 1200px) {
     .app-shell {
         grid-template-columns: 240px minmax(0, 1fr);
+    }
+
+    .action-grid {
+        grid-template-columns: 1fr;
     }
 
     .inspector {

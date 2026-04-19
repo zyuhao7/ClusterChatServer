@@ -18,6 +18,26 @@ export interface SearchUserRequest extends ProtocolEnvelope {
     offset: number
 }
 
+export interface SearchUserEntry {
+    id: number
+    name: string
+    state: PresenceState | string
+    is_friend: boolean
+    has_blocked: boolean
+    blocked_by_target: boolean
+}
+
+export interface HistoryEntry {
+    id: number
+    sender_id: number
+    receiver_id?: number
+    group_id?: number
+    message: string
+    read_state: string
+    recalled: number
+    created_at: string
+}
+
 export const CHAT_PROTOCOL_VERSION = 1
 
 export function createProtocolSummary() {
