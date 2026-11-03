@@ -49,7 +49,7 @@ bool Redis::Connect()
 
 bool Redis::Publish(int channel, string message)
 {
-    redisReply *reply = (redisReply *)redisCommand(_publish_context, "PUBLISH %d %s", channel, message.c_str());
+    redisReply *reply = static_cast<redisReply *>(redisCommand(_publish_context, "PUBLISH %d %s", channel, message.c_str()));
     if (nullptr == reply)
     {
         cerr << "publish message failed!" << endl;
@@ -106,7 +106,7 @@ bool Redis::Unsubscribe(int channel)
 void Redis::Observer_Channel_Message()
 {
     redisReply *reply = nullptr;
-    while (REDIS_OK == redisGetReply(_subcribe_context, (void **)&reply))
+    while (REDIS_OK == redisGetReply(_subcribe_context, reinterpret_cast<void **>(&reply)))
     {
         if (reply != nullptr && reply->element[2] != nullptr && reply->element[2]->str != nullptr)
         {

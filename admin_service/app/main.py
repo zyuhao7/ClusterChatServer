@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from admin_service.app.core.config import settings
 from admin_service.app.ai.service import ai_worker
+from admin_service.app.core.config import settings
 from admin_service.app.routers import (
     admin_ops,
     ai,
@@ -15,7 +15,6 @@ from admin_service.app.routers import (
     offline_messages,
     users,
 )
-
 
 app = FastAPI(
     title=settings.app_name,

@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-from pathlib import Path
 import socket
 import sqlite3
 import sys
+from pathlib import Path
 
 import pytest
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tests_support.local_runtime import (  # noqa: E402
-    CleanupReport,
     EPHEMERAL_PORT_MAX,
     EPHEMERAL_PORT_MIN,
+    CleanupReport,
     GeneratedRowsCleaner,
     PreflightDependencyError,
     allocate_free_localhost_port,

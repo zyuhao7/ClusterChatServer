@@ -1,0 +1,18 @@
+target-version = "py312"
+line-length = 100
+
+exclude = [
+    ".git",
+    ".venv",
+    "admin_service/.venv",
+    "desktop_client/node_modules",
+    "desktop_client/src-tauri/target",
+]
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501", "B008"]
+
+[lint.per-file-ignores]
+# Tests prepend the repo root to sys.path before importing project modules.
+"tests/**" = ["E402"]

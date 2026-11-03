@@ -37,6 +37,15 @@ bash scripts/check_admin_metrics.sh
 python3 scripts/check_server_roundtrip.py
 ```
 
+## Lint
+
+```bash
+bash scripts/lint_python.sh                 # ruff via uvx
+bash scripts/lint_cpp.sh                    # cppcheck (install: sudo apt install cppcheck)
+cd desktop_client && npm run lint           # eslint
+cd desktop_client && npm run format:check   # prettier
+```
+
 ## Database (order-sensitive)
 
 ```bash
