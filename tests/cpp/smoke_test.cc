@@ -126,6 +126,7 @@ int main()
     dbFixture().bootstrapSuite();
     test_user_modal_uses_isolated_schema();
     test_fixture_reset_leaves_zero_residual_rows();
+    dbFixture().teardownSuite();
     std::cout << "cluster_chat_unit passed" << std::endl;
     return 0;
 }

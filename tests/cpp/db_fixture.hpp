@@ -7,8 +7,10 @@ class DeterministicDbFixture
 {
 public:
     DeterministicDbFixture();
+    ~DeterministicDbFixture();
 
     void bootstrapSuite();
+    void teardownSuite();
     void resetTables();
     long long rowCount(const std::string &table_name);
 
@@ -26,6 +28,7 @@ private:
     };
 
     FixtureConfig _cfg;
+    bool _ready;
 };
 
 #endif
