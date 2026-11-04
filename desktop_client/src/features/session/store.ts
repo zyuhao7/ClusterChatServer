@@ -8,6 +8,7 @@ import {
     groupSessionId,
     parseFriends,
     parseGroups,
+    presenceLabel,
     RECALL_NOTIFY_MSG,
     resolveSessionId,
     sessionPreviewFromTimeline,
@@ -177,7 +178,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                     const nextSessions = updateSessionMeta(state.sessions, directId, (session) => ({
                         ...session,
                         presence: event.state ?? session.presence,
-                        subtitle: `friend · ${event.state ?? session.presence}`,
+                        subtitle: `好友 · ${presenceLabel(event.state ?? session.presence)}`,
                     }))
                     return {
                         friends: nextFriends,
@@ -190,7 +191,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                             key,
                             items.map((item) =>
                                 item.messageId === event.message_id
-                                    ? { ...item, recalled: true, body: "message recalled" }
+                                    ? { ...item, recalled: true, body: "[消息已撤回]" }
                                     : item,
                             ),
                         ]),
@@ -213,10 +214,10 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                     {
                         sessionId,
                         rawId: event.groupid ?? event.id ?? 0,
-                        title: event.groupid ? `Group ${event.groupid}` : event.name || `User ${event.id}`,
+                        title: event.groupid ? `群组 ${event.groupid}` : event.name || `用户 ${event.id}`,
                         kind: event.groupid ? "group" : "direct",
                         presence: event.groupid ? "group" : "online",
-                        subtitle: event.groupid ? "incoming group message" : "incoming direct message",
+                        subtitle: event.groupid ? "收到群聊消息" : "收到单聊消息",
                         unreadCount: 0,
                         latestMessage: "",
                         latestTimestamp: "",
@@ -252,7 +253,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                         title: user.name,
                         kind: "direct",
                         presence: user.state,
-                        subtitle: `search result · ${user.state}`,
+                        subtitle: `搜索结果 · ${presenceLabel(user.state)}`,
                         unreadCount: 0,
                         latestMessage: "",
                         latestTimestamp: "",
@@ -269,7 +270,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
             },
             sessions: updateSessionMeta(state.sessions, directSessionId(user.id), (session) => ({
                 ...session,
-                subtitle: `friend · ${user.state}`,
+                subtitle: `好友 · ${presenceLabel(user.state)}`,
             })),
         })),
     updateFriendProfile: (userId, avatarUrl) =>
@@ -297,7 +298,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
                         title: name,
                         kind: "group" as const,
                         presence: "group",
-                        subtitle: desc || "group",
+                        subtitle: desc || "群聊",
                         unreadCount: 0,
                         latestMessage: "",
                         latestTimestamp: "",

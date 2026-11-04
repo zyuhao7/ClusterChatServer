@@ -24,7 +24,7 @@ import {
     uploadAvatar,
     updateUserProfile,
 } from "./lib/bridge"
-import { createProtocolSummary, directSessionId, groupSessionId, type AttachmentPayload } from "./lib/protocol"
+import { createProtocolSummary, directSessionId, groupSessionId, presenceLabel, roleLabel, sessionKindLabel, type AttachmentPayload } from "./lib/protocol"
 import { isTauriRuntime } from "./lib/tauri"
 import { useSessionStore } from "./features/session/store"
 
@@ -60,6 +60,25 @@ function attachmentIcon(kind: "image" | "file", mime: string) {
         return "TXT"
     }
     return "FILE"
+}
+
+function downloadStateLabel(state: string | undefined) {
+    switch (state) {
+        case "remote":
+            return "未下载"
+        case "downloading":
+            return "下载中"
+        case "error":
+            return "下载失败"
+        case "cached":
+            return "已缓存"
+        default:
+            return state ?? "未下载"
+    }
+}
+
+function yesNo(value: boolean) {
+    return value ? "是" : "否"
 }
 
 function toDraft(file: File): AttachmentDraft {
@@ -203,11 +222,11 @@ export default function App() {
                             <div className="session-head-row">
                                 <span className="session-title">{session.title}</span>
                                 <div className="button-row compact-row">
-                                    {store.pinnedSessionIds.includes(session.sessionId) ? <span className="badge">Pinned</span> : null}
+                                    {store.pinnedSessionIds.includes(session.sessionId) ? <span className="badge">已置顶</span> : null}
                                     {session.unreadCount > 0 ? <span className="badge badge-unread">{session.unreadCount}</span> : null}
                                 </div>
                             </div>
-                            <span className="session-meta">{session.kind} · {session.subtitle}</span>
+                            <span className="session-meta">{sessionKindLabel(session.kind)} · {session.subtitle}</span>
                             {session.latestMessage ? <span className="session-preview">{session.latestMessage}</span> : null}
                         </button>
                     ))}
@@ -326,7 +345,7 @@ export default function App() {
             return
         }
         setAttachmentDrafts((current) => [...current, ...nextDrafts])
-        store.setLastResponse(`Selected ${nextDrafts.length} attachment(s)`) 
+        store.setLastResponse(`已选择 ${nextDrafts.length} 个附件`)
     }
 
     function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
@@ -337,7 +356,7 @@ export default function App() {
         setAvatarFile(file)
         setAvatarFileName(file.name)
         setAvatarPreviewUrl(URL.createObjectURL(file))
-        store.setLastResponse(`Selected avatar draft: ${file.name}`)
+        store.setLastResponse(`已选择头像草稿：${file.name}`)
     }
 
     function handleAttachmentChange(event: ChangeEvent<HTMLInputElement>) {
@@ -382,7 +401,7 @@ export default function App() {
         const response = await fetch(attachment.url)
         if (!response.ok) {
             setDownloadStates((current) => ({ ...current, [attachment.url]: "error" }))
-            throw new Error(`Download failed: ${attachment.name}`)
+            throw new Error(`下载失败：${attachment.name}`)
         }
         const blob = await response.blob()
         const objectUrl = URL.createObjectURL(blob)
@@ -412,11 +431,11 @@ export default function App() {
         if (!retryOnlyFailed && text) {
             if (selectedSession.kind === "direct") {
                 const response = await sendDirectMessage(selectedSession.rawId, text)
-                store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
+                store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "我", text, timestamp, Number(response.message_id ?? 0))
                 store.setLastResponse(JSON.stringify(response, null, 2))
             } else {
                 const response = await sendGroupMessage(selectedSession.rawId, text)
-                store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", text, timestamp, Number(response.message_id ?? 0))
+                store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "我", text, timestamp, Number(response.message_id ?? 0))
                 store.setLastResponse(JSON.stringify(response, null, 2))
             }
         }
@@ -431,11 +450,11 @@ export default function App() {
                 const payload = JSON.stringify(uploaded)
                 if (selectedSession.kind === "direct") {
                     const response = await sendDirectMessage(selectedSession.rawId, payload)
-                    store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", payload, timestamp, Number(response.message_id ?? 0))
+                    store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "我", payload, timestamp, Number(response.message_id ?? 0))
                     store.setLastResponse(JSON.stringify(response, null, 2))
                 } else {
                     const response = await sendGroupMessage(selectedSession.rawId, payload)
-                    store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "me", payload, timestamp, Number(response.message_id ?? 0))
+                    store.appendLocalMessage(selectedSession.sessionId, store.loggedInUserName || "我", payload, timestamp, Number(response.message_id ?? 0))
                     store.setLastResponse(JSON.stringify(response, null, 2))
                 }
                 removeAttachmentDraft(draft.id)
@@ -454,39 +473,39 @@ export default function App() {
         <div className="app-shell">
             <aside className="panel sidebar">
                 <div>
-                    <p className="eyebrow">ClusterChat Desktop</p>
-                    <h1>Live Sessions</h1>
+                    <p className="eyebrow">ClusterChat 桌面客户端</p>
+                    <h1>实时会话</h1>
                     <p className="muted">
-                        {isTauriRuntime() ? "Running inside Tauri shell" : "Running in browser preview mode"}
+                        {isTauriRuntime() ? "运行于 Tauri 桌面容器" : "运行于浏览器预览模式"}
                     </p>
                 </div>
 
                 <section>
-                    <h2>Server</h2>
+                    <h2>服务器</h2>
                     <label className="field">
-                        <span>Host</span>
+                        <span>主机</span>
                         <input value={store.host} onChange={(event) => store.setField("host", event.target.value)} />
                     </label>
                     <label className="field">
-                        <span>Port</span>
+                        <span>端口</span>
                         <input value={store.port} onChange={(event) => store.setField("port", Number(event.target.value) || 0)} />
                     </label>
                 </section>
 
                 <section>
-                    <h2>Login</h2>
+                    <h2>登录</h2>
                     <label className="field">
-                        <span>User ID</span>
+                        <span>用户 ID</span>
                         <input value={store.userIdInput} onChange={(event) => store.setField("userIdInput", event.target.value)} />
                     </label>
                     <label className="field">
-                        <span>Password</span>
+                        <span>密码</span>
                         <input type="password" value={store.password} onChange={(event) => store.setField("password", event.target.value)} />
                     </label>
                     <div className="button-row">
                         <button
                             onClick={() =>
-                                runAction("login", async () => {
+                                runAction("登录", async () => {
                                     const response = await login(store.host, store.port, Number(store.userIdInput), store.password)
                                     store.setLoggedInUser(response.id, response.name)
                                     store.setPresence("online")
@@ -496,11 +515,11 @@ export default function App() {
                             }
                             type="button"
                         >
-                            Login
+                            登录
                         </button>
                         <button
                             onClick={() =>
-                                runAction("logout", async () => {
+                                runAction("退出登录", async () => {
                                     const response = await logout()
                                     store.resetSession()
                                     setAvatarFile(null)
@@ -513,28 +532,28 @@ export default function App() {
                             }
                             type="button"
                         >
-                            Logout
+                            退出登录
                         </button>
                     </div>
                 </section>
 
                 <section>
-                    <h2>Sessions</h2>
+                    <h2>会话</h2>
                     <label className="field">
-                        <span>Search sessions</span>
-                        <input value={sessionFilter} onChange={(event) => setSessionFilter(event.target.value)} placeholder="Search session title or subtitle" />
+                        <span>搜索会话</span>
+                        <input value={sessionFilter} onChange={(event) => setSessionFilter(event.target.value)} placeholder="搜索会话标题或副标题" />
                     </label>
-                    {sortedSessions.length === 0 ? <p className="muted">No sessions yet.</p> : null}
-                    {renderSessionSection("Pinned", sessionGroups.pinned)}
-                    {renderSessionSection("Unread", sessionGroups.unread)}
-                    {renderSessionSection("Direct", sessionGroups.direct)}
-                    {renderSessionSection("Groups", sessionGroups.group)}
+                    {sortedSessions.length === 0 ? <p className="muted">暂无会话。</p> : null}
+                    {renderSessionSection("置顶", sessionGroups.pinned)}
+                    {renderSessionSection("未读", sessionGroups.unread)}
+                    {renderSessionSection("单聊", sessionGroups.direct)}
+                    {renderSessionSection("群组", sessionGroups.group)}
                 </section>
 
                 <section className="card-section">
-                    <p className="eyebrow">Recent Contacts</p>
+                    <p className="eyebrow">最近联系人</p>
                     <div className="recent-contact-list">
-                        {recentContacts.length === 0 ? <p className="muted">No recent direct sessions.</p> : null}
+                        {recentContacts.length === 0 ? <p className="muted">暂无最近单聊。</p> : null}
                         {recentContacts.map((session) => (
                             <button key={session.sessionId} className="recent-contact" onClick={() => store.setSelectedSessionId(session.sessionId)} type="button">
                                 <strong>{session.title}</strong>
@@ -545,57 +564,57 @@ export default function App() {
                 </section>
 
                 <section className="card-section">
-                    <p className="eyebrow">Create Or Join Group</p>
+                    <p className="eyebrow">创建或加入群组</p>
                     <label className="field">
-                        <span>Group name</span>
+                        <span>群名称</span>
                         <input value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} />
                     </label>
                     <label className="field">
-                        <span>Group description</span>
+                        <span>群简介</span>
                         <input value={newGroupDesc} onChange={(event) => setNewGroupDesc(event.target.value)} />
                     </label>
-                    <button onClick={() => runAction("create group", async () => {
+                    <button onClick={() => runAction("创建群组", async () => {
                         const response = await createGroup(newGroupName, newGroupDesc)
-                        store.upsertGroupSession(Number(response.groupid), newGroupName || `Group ${response.groupid}`, newGroupDesc)
+                        store.upsertGroupSession(Number(response.groupid), newGroupName || `群组 ${response.groupid}`, newGroupDesc)
                         store.setLastResponse(JSON.stringify(response, null, 2))
-                    })} type="button">Create Group</button>
+                    })} type="button">创建群组</button>
                     <label className="field">
-                        <span>Join group id</span>
+                        <span>加入群组 ID</span>
                         <input value={joinGroupId} onChange={(event) => setJoinGroupId(event.target.value)} />
                     </label>
-                    <button onClick={() => runAction("join group", async () => {
+                    <button onClick={() => runAction("加入群组", async () => {
                         const response = await joinGroup(Number(joinGroupId))
-                        store.upsertGroupSession(Number(joinGroupId), `Group ${joinGroupId}`, "joined group")
+                        store.upsertGroupSession(Number(joinGroupId), `群组 ${joinGroupId}`, "已加入群组")
                         store.setLastResponse(JSON.stringify(response, null, 2))
-                    })} type="button">Join Group</button>
+                    })} type="button">加入群组</button>
                 </section>
             </aside>
 
             <main className="panel content">
                 <section className="hero">
                     <div>
-                        <p className="eyebrow">Current Session</p>
-                        <h2>{selectedSession?.title || store.loggedInUserName || "No active session"}</h2>
+                        <p className="eyebrow">当前会话</p>
+                        <h2>{selectedSession?.title || store.loggedInUserName || "未选择会话"}</h2>
                         <p className="muted">
-                            {selectedSession?.subtitle || "Login and select a session to see live timeline updates."}
+                            {selectedSession?.subtitle || "登录并选择会话后即可查看实时消息。"}
                         </p>
                     </div>
                     <div className="badge-cluster">
-                        <span className="badge">presence: {store.presence}</span>
-                        <span className="badge">{pending ? `running ${pending}` : "idle"}</span>
+                        <span className="badge">状态：{presenceLabel(store.presence)}</span>
+                        <span className="badge">{pending ? `进行中：${pending}` : "空闲"}</span>
                     </div>
                 </section>
 
                 <section className="timeline timeline-scroll">
                     <div className="timeline-toolbar">
                         <div className="button-row compact-row">
-                            <button className={attachmentFilter === "all" ? "filter-button filter-button-active" : "filter-button"} onClick={() => setAttachmentFilter("all")} type="button">All</button>
-                            <button className={attachmentFilter === "images" ? "filter-button filter-button-active" : "filter-button"} onClick={() => setAttachmentFilter("images")} type="button">Images</button>
-                            <button className={attachmentFilter === "files" ? "filter-button filter-button-active" : "filter-button"} onClick={() => setAttachmentFilter("files")} type="button">Files</button>
+                            <button className={attachmentFilter === "all" ? "filter-button filter-button-active" : "filter-button"} onClick={() => setAttachmentFilter("all")} type="button">全部</button>
+                            <button className={attachmentFilter === "images" ? "filter-button filter-button-active" : "filter-button"} onClick={() => setAttachmentFilter("images")} type="button">图片</button>
+                            <button className={attachmentFilter === "files" ? "filter-button filter-button-active" : "filter-button"} onClick={() => setAttachmentFilter("files")} type="button">文件</button>
                         </div>
-                        <input value={attachmentSearch} onChange={(event) => setAttachmentSearch(event.target.value)} placeholder="Filter attachment history" />
+                        <input value={attachmentSearch} onChange={(event) => setAttachmentSearch(event.target.value)} placeholder="筛选附件记录" />
                     </div>
-                    {currentTimeline.length === 0 ? <p className="muted">No messages for the selected session yet.</p> : null}
+                    {currentTimeline.length === 0 ? <p className="muted">当前会话暂无消息。</p> : null}
                     {currentTimeline.map((entry) => (
                         <article key={entry.id} className={entry.recalled ? "message-card message-recalled" : "message-card"}>
                             <div className="message-head">
@@ -622,21 +641,21 @@ export default function App() {
                                     <div className="button-row compact-row">
                                         <button
                                             onClick={() =>
-                                                runAction("download attachment", async () => {
+                                                runAction("下载附件", async () => {
                                                     const url = await cacheAttachment(entry.attachment!)
                                                     window.open(url, "_blank", "noopener,noreferrer")
                                                 })
                                             }
                                             type="button"
                                         >
-                                            {downloadStates[entry.attachment.url] === "cached" ? "Open Cached" : "Download"}
+                                            {downloadStates[entry.attachment.url] === "cached" ? "打开缓存" : "下载"}
                                         </button>
                                         {entry.attachment.kind === "image" ? (
-                                            <button onClick={() => setLightboxAttachment(entry.attachment ?? null)} type="button">Preview</button>
+                                            <button onClick={() => setLightboxAttachment(entry.attachment ?? null)} type="button">预览</button>
                                         ) : null}
                                     </div>
-                                    {downloadStates[entry.attachment.url] === "downloading" ? <span className="muted">Downloading...</span> : null}
-                                    {downloadStates[entry.attachment.url] === "error" ? <span className="error-text">Download failed</span> : null}
+                                    {downloadStates[entry.attachment.url] === "downloading" ? <span className="muted">下载中...</span> : null}
+                                    {downloadStates[entry.attachment.url] === "error" ? <span className="error-text">下载失败</span> : null}
                                 </div>
                             ) : (
                                 <p>{entry.body}</p>
@@ -653,37 +672,37 @@ export default function App() {
                 >
                     <textarea
                         className="composer-input"
-                        placeholder={selectedSession ? "Type a message or drop files here..." : "Select a session first"}
+                        placeholder={selectedSession ? "输入消息，或将文件拖到这里..." : "请先选择会话"}
                         value={store.composerText}
                         onChange={(event) => store.setField("composerText", event.target.value)}
                     />
                     <div className="button-row">
                         <label className="button-like">
-                            <span>Choose Attachments</span>
+                            <span>选择附件</span>
                             <input className="hidden-input" multiple type="file" onChange={handleAttachmentChange} />
                         </label>
                         <button
                             disabled={!selectedSession || (!store.composerText.trim() && attachmentDrafts.length === 0)}
                             onClick={() =>
-                                runAction("send message", async () => {
+                                runAction("发送消息", async () => {
                                     await sendCurrentMessage()
                                 })
                             }
                             type="button"
                         >
-                            Send Message
+                            发送消息
                         </button>
-                        <button onClick={() => store.setField("composerText", "")} type="button">Clear</button>
+                        <button onClick={() => store.setField("composerText", "")} type="button">清空</button>
                         <button
                             disabled={!selectedSession || attachmentDrafts.every((draft) => !draft.error)}
                             onClick={() =>
-                                runAction("retry attachment", async () => {
+                                runAction("重试附件", async () => {
                                     await sendCurrentMessage(true)
                                 })
                             }
                             type="button"
                         >
-                            Retry Failed
+                            重试失败项
                         </button>
                     </div>
                     {attachmentDrafts.length > 0 ? (
@@ -693,9 +712,9 @@ export default function App() {
                                     {draft.previewUrl ? <img alt={draft.file.name} className="draft-image" src={draft.previewUrl} /> : null}
                                     <strong>{draft.file.name}</strong>
                                     <span>{formatBytes(draft.file.size)}</span>
-                                    <span>{draft.progress > 0 ? `Upload ${draft.progress}%` : "Waiting"}</span>
+                                    <span>{draft.progress > 0 ? `上传 ${draft.progress}%` : "等待中"}</span>
                                     {draft.error ? <span className="error-text">{draft.error}</span> : null}
-                                    <button onClick={() => removeAttachmentDraft(draft.id)} type="button">Remove</button>
+                                    <button onClick={() => removeAttachmentDraft(draft.id)} type="button">移除</button>
                                 </div>
                             ))}
                         </div>
@@ -705,45 +724,45 @@ export default function App() {
 
             <aside className="panel inspector">
                 <section className="card-section">
-                    <p className="eyebrow">Profile Actions</p>
+                    <p className="eyebrow">个人资料操作</p>
                     <div className="detail-card">
-                        <strong>{store.loggedInUserName || "Guest"}</strong>
-                        <span>User ID: {store.loggedInUserId ?? "-"}</span>
-                        <span>Presence: {store.presence}</span>
-                        <span>Server: {store.host}:{store.port}</span>
+                        <strong>{store.loggedInUserName || "访客"}</strong>
+                        <span>用户 ID：{store.loggedInUserId ?? "-"}</span>
+                        <span>状态：{presenceLabel(store.presence)}</span>
+                        <span>服务器：{store.host}:{store.port}</span>
                     </div>
                     <div className="button-row">
-                        <button onClick={() => runAction("set busy", async () => {
+                        <button onClick={() => runAction("切换忙碌", async () => {
                             const response = await setPresence("busy")
                             store.setPresence("busy")
                             store.setLastResponse(JSON.stringify(response, null, 2))
-                        })} type="button">Set Busy</button>
-                        <button onClick={() => runAction("set online", async () => {
+                        })} type="button">设为忙碌</button>
+                        <button onClick={() => runAction("切换在线", async () => {
                             const response = await setPresence("online")
                             store.setPresence("online")
                             store.setLastResponse(JSON.stringify(response, null, 2))
-                        })} type="button">Set Online</button>
+                        })} type="button">设为在线</button>
                     </div>
                     <label className="field">
-                        <span>Nickname</span>
+                        <span>昵称</span>
                         <input value={store.loggedInUserName} onChange={(event) => store.setField("loggedInUserName", event.target.value)} />
                     </label>
-                    <button onClick={() => runAction("set nickname", async () => {
+                    <button onClick={() => runAction("更新昵称", async () => {
                         const response = await setNickname(store.loggedInUserName)
                         store.setLastResponse(JSON.stringify(response, null, 2))
-                    })} type="button">Update Nickname</button>
+                    })} type="button">更新昵称</button>
                     <label className="field">
-                        <span>Bio</span>
+                        <span>个人简介</span>
                         <textarea value={bioDraft} onChange={(event) => setBioDraft(event.target.value)} />
                     </label>
                     <label className="field">
-                        <span>Location</span>
+                        <span>所在地</span>
                         <input value={locationDraft} onChange={(event) => setLocationDraft(event.target.value)} />
                     </label>
                     <button
                         disabled={!store.loggedInUserId}
                         onClick={() =>
-                            runAction("save profile", async () => {
+                            runAction("保存资料", async () => {
                                 if (!store.loggedInUserId) {
                                     return
                                 }
@@ -753,16 +772,16 @@ export default function App() {
                         }
                         type="button"
                     >
-                        Save Profile Details
+                        保存资料
                     </button>
                     <label className="field">
-                        <span>Avatar draft</span>
+                        <span>头像草稿</span>
                         <input type="file" accept="image/*" onChange={handleAvatarChange} />
                     </label>
                     <button
                         disabled={!store.loggedInUserId || !avatarFile}
                         onClick={() =>
-                            runAction("upload avatar", async () => {
+                            runAction("上传头像", async () => {
                                 if (!avatarFile || !store.loggedInUserId) {
                                     return
                                 }
@@ -774,11 +793,11 @@ export default function App() {
                         }
                         type="button"
                     >
-                        Upload Avatar
+                        上传头像
                     </button>
-                    {store.loggedInUserAvatarUrl ? <img alt="current avatar" className="avatar-preview" src={store.loggedInUserAvatarUrl} /> : null}
-                    {avatarPreviewUrl ? <img alt="avatar preview" className="avatar-preview" src={avatarPreviewUrl} /> : null}
-                    {avatarFileName ? <p className="muted">Selected file: {avatarFileName}</p> : null}
+                    {store.loggedInUserAvatarUrl ? <img alt="当前头像" className="avatar-preview" src={store.loggedInUserAvatarUrl} /> : null}
+                    {avatarPreviewUrl ? <img alt="头像预览" className="avatar-preview" src={avatarPreviewUrl} /> : null}
+                    {avatarFileName ? <p className="muted">已选择文件：{avatarFileName}</p> : null}
                     <button
                         disabled={!avatarFile && !avatarPreviewUrl}
                         onClick={() => {
@@ -788,25 +807,25 @@ export default function App() {
                         }}
                         type="button"
                     >
-                        Reset Avatar Draft
+                        重置头像草稿
                     </button>
                 </section>
 
                 <section className="card-section">
-                    <p className="eyebrow">Session Card</p>
-                    {!selectedSession ? <p className="muted">Select a session to view details.</p> : null}
+                    <p className="eyebrow">会话卡片</p>
+                    {!selectedSession ? <p className="muted">选择会话以查看详情。</p> : null}
                     {directProfile ? (
                         <div className="detail-card">
                             <strong>{directProfile.name}</strong>
-                            {directProfile.avatar_url ? <img alt="friend avatar" className="avatar-preview avatar-preview-small" src={directProfile.avatar_url} /> : null}
-                            <span>ID: {directProfile.id}</span>
-                            <span>State: {directProfile.state}</span>
+                            {directProfile.avatar_url ? <img alt="好友头像" className="avatar-preview avatar-preview-small" src={directProfile.avatar_url} /> : null}
+                            <span>ID：{directProfile.id}</span>
+                            <span>状态：{presenceLabel(directProfile.state)}</span>
                             {selectedSession ? (
                                 <button onClick={() => store.togglePinnedSession(selectedSession.sessionId)} type="button">
-                                    {store.pinnedSessionIds.includes(selectedSession.sessionId) ? "Unpin Session" : "Pin Session"}
+                                    {store.pinnedSessionIds.includes(selectedSession.sessionId) ? "取消置顶" : "置顶会话"}
                                 </button>
                             ) : null}
-                            <button onClick={() => runAction("add friend", async () => {
+                            <button onClick={() => runAction("添加好友", async () => {
                                 const response = await addFriend(directProfile.id)
                                 store.markFriend({
                                     id: directProfile.id,
@@ -817,21 +836,21 @@ export default function App() {
                                     blocked_by_target: false,
                                 })
                                 store.setLastResponse(JSON.stringify(response, null, 2))
-                            })} type="button">Add Friend</button>
+                            })} type="button">添加好友</button>
                         </div>
                     ) : null}
                     {groupProfile ? (
                         <div className="detail-card">
                             <strong>{groupProfile.groupname}</strong>
-                            <span>ID: {groupProfile.id}</span>
+                            <span>ID：{groupProfile.id}</span>
                             <span>{groupProfile.groupdesc}</span>
-                            {groupProfile.announcement ? <span>Announcement: {groupProfile.announcement}</span> : null}
-                            <span>Members: {groupStats?.memberCount ?? groupProfile.users.length}</span>
-                            <span>Admins: {groupStats?.adminCount ?? 0}</span>
-                            <span>Muted: {groupStats?.mutedCount ?? 0}</span>
+                            {groupProfile.announcement ? <span>公告：{groupProfile.announcement}</span> : null}
+                            <span>成员：{groupStats?.memberCount ?? groupProfile.users.length}</span>
+                            <span>管理员：{groupStats?.adminCount ?? 0}</span>
+                            <span>已禁言：{groupStats?.mutedCount ?? 0}</span>
                             {selectedSession ? (
                                 <button onClick={() => store.togglePinnedSession(selectedSession.sessionId)} type="button">
-                                    {store.pinnedSessionIds.includes(selectedSession.sessionId) ? "Unpin Session" : "Pin Session"}
+                                    {store.pinnedSessionIds.includes(selectedSession.sessionId) ? "取消置顶" : "置顶会话"}
                                 </button>
                             ) : null}
                         </div>
@@ -839,29 +858,29 @@ export default function App() {
                 </section>
 
                 <section className="card-section">
-                    <p className="eyebrow">Search User</p>
+                    <p className="eyebrow">搜索用户</p>
                     <label className="field">
-                        <span>Keyword</span>
+                        <span>关键词</span>
                         <input value={store.searchKeyword} onChange={(event) => store.setField("searchKeyword", event.target.value)} />
                     </label>
-                    <button onClick={() => runAction("search users", async () => {
+                    <button onClick={() => runAction("搜索用户", async () => {
                         const { response, users } = await searchUsers(store.searchKeyword)
                         store.setSearchResults(users)
                         store.setLastResponse(JSON.stringify(response, null, 2))
-                    })} type="button">Search</button>
+                    })} type="button">搜索</button>
                     <div className="result-list">
                         {store.searchResults.map((user) => (
                             <article key={user.id} className="result-card">
                                 <strong>{user.name}</strong>
-                                <span>{user.state}</span>
-                                <span>friend: {String(user.is_friend)}</span>
+                                <span>{presenceLabel(user.state)}</span>
+                                <span>好友：{yesNo(user.is_friend)}</span>
                                 <div className="button-row compact-row">
-                                    <button onClick={() => store.upsertSearchSession(user)} type="button">Open Session</button>
-                                    <button onClick={() => runAction("add friend", async () => {
+                                    <button onClick={() => store.upsertSearchSession(user)} type="button">打开会话</button>
+                                    <button onClick={() => runAction("添加好友", async () => {
                                         const response = await addFriend(user.id)
                                         store.markFriend(user)
                                         store.setLastResponse(JSON.stringify(response, null, 2))
-                                    })} type="button">Add Friend</button>
+                                    })} type="button">添加好友</button>
                                 </div>
                             </article>
                         ))}
@@ -870,18 +889,18 @@ export default function App() {
 
                 {groupProfile ? (
                     <section className="card-section">
-                        <p className="eyebrow">Group Moderation</p>
+                        <p className="eyebrow">群组管理</p>
                         <label className="field">
-                            <span>Group name</span>
+                            <span>群名称</span>
                             <input value={groupProfileName} onChange={(event) => setGroupProfileName(event.target.value)} />
                         </label>
                         <label className="field">
-                            <span>Group description</span>
+                            <span>群简介</span>
                             <textarea value={groupProfileDesc} onChange={(event) => setGroupProfileDesc(event.target.value)} />
                         </label>
                         <button
                             onClick={() =>
-                                runAction("update group profile", async () => {
+                                runAction("更新群资料", async () => {
                                     const response = await setGroupProfile(groupProfile.id, groupProfileName, groupProfileDesc)
                                     store.updateGroupProfile(groupProfile.id, groupProfileName, groupProfileDesc)
                                     store.setLastResponse(JSON.stringify(response, null, 2))
@@ -889,74 +908,74 @@ export default function App() {
                             }
                             type="button"
                         >
-                            Save Group Profile
+                            保存群资料
                         </button>
                         <label className="field">
-                            <span>Announcement</span>
+                            <span>公告</span>
                             <textarea value={announcementDraft} onChange={(event) => setAnnouncementDraft(event.target.value)} />
                         </label>
-                        <button onClick={() => runAction("set announcement", async () => {
+                        <button onClick={() => runAction("更新公告", async () => {
                             const response = await setGroupAnnouncement(groupProfile.id, announcementDraft)
                             store.updateGroupAnnouncement(groupProfile.id, announcementDraft)
                             store.setLastResponse(JSON.stringify(response, null, 2))
-                        })} type="button">Update Announcement</button>
+                        })} type="button">更新公告</button>
                         <label className="field">
-                            <span>Filter members</span>
-                            <input value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)} placeholder="Search by name or ID" />
+                            <span>筛选成员</span>
+                            <input value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)} placeholder="按昵称或 ID 搜索" />
                         </label>
                         <div className="member-list">
                             {filteredMembers.map((member) => (
                                 <div key={member.id} className="detail-card member-card member-card-interactive">
                                     <strong>{member.name}</strong>
-                                    <span>ID: {member.id}</span>
-                                    <span>Role: {member.role}</span>
-                                    {member.muted_until ? <span>Muted until: {member.muted_until}</span> : null}
+                                    <span>ID：{member.id}</span>
+                                    <span>角色：{roleLabel(member.role)}</span>
+                                    {member.muted_until ? <span>禁言至：{member.muted_until}</span> : null}
                                     <div className="button-row compact-row">
-                                        <button onClick={() => setMuteTargetId(String(member.id))} type="button">Pick For Mute</button>
-                                        <button onClick={() => setKickTargetId(String(member.id))} type="button">Pick For Kick</button>
+                                        <button onClick={() => setMuteTargetId(String(member.id))} type="button">选为禁言对象</button>
+                                        <button onClick={() => setKickTargetId(String(member.id))} type="button">选为踢出对象</button>
                                     </div>
                                 </div>
                             ))}
                         </div>
                         <label className="field">
-                            <span>Mute target ID</span>
+                            <span>禁言对象 ID</span>
                             <input value={muteTargetId} onChange={(event) => setMuteTargetId(event.target.value)} />
                         </label>
                         <label className="field">
-                            <span>Minutes</span>
+                            <span>分钟</span>
                             <input value={muteMinutes} onChange={(event) => setMuteMinutes(event.target.value)} />
                         </label>
-                        <button onClick={() => runAction("mute member", async () => {
+                        <button onClick={() => runAction("禁言成员", async () => {
                             const response = await muteGroupMember(groupProfile.id, Number(muteTargetId), Number(muteMinutes))
                             store.updateGroupMemberMute(groupProfile.id, Number(muteTargetId), String(response.muted_until ?? ""))
                             store.setLastResponse(JSON.stringify(response, null, 2))
-                        })} type="button">Mute Member</button>
+                        })} type="button">禁言成员</button>
                         <label className="field">
-                            <span>Kick target ID</span>
+                            <span>踢出对象 ID</span>
                             <input value={kickTargetId} onChange={(event) => setKickTargetId(event.target.value)} />
                         </label>
-                        <button onClick={() => runAction("kick member", async () => {
+                        <button onClick={() => runAction("踢出成员", async () => {
                             const response = await kickGroupMember(groupProfile.id, Number(kickTargetId))
                             store.removeGroupMember(groupProfile.id, Number(kickTargetId))
                             store.setLastResponse(JSON.stringify(response, null, 2))
-                        })} type="button">Kick Member</button>
+                        })} type="button">踢出成员</button>
                     </section>
                 ) : null}
 
                 <section className="card-section">
-                    <p className="eyebrow">History Sync</p>
+                    <p className="eyebrow">历史同步</p>
                     <label className="field">
-                        <span>Order</span>
+                        <span>排序</span>
                         <select value={store.historyOrder} onChange={(event) => store.setField("historyOrder", event.target.value as "asc" | "desc") }>
-                            <option value="desc">desc</option>
-                            <option value="asc">asc</option>
+                            <option value="desc">降序</option>
+                            <option value="asc">升序</option>
                         </select>
                     </label>
                     <div className="button-row">
                         <button
                             disabled={!selectedSession || selectedSession.kind !== "direct"}
                             onClick={() =>
-                                runAction("direct history", async () => {
+                                runAction("同步单聊历史", async () => {
                                     if (!selectedSession) {
                                         return
                                     }
@@ -967,12 +986,12 @@ export default function App() {
                             }
                             type="button"
                         >
-                            Sync Direct
+                            同步单聊
                         </button>
                         <button
                             disabled={!selectedSession || selectedSession.kind !== "group"}
                             onClick={() =>
-                                runAction("group history", async () => {
+                                runAction("同步群聊历史", async () => {
                                     if (!selectedSession) {
                                         return
                                     }
@@ -983,23 +1002,23 @@ export default function App() {
                             }
                             type="button"
                         >
-                            Sync Group
+                            同步群聊
                         </button>
                     </div>
                 </section>
 
                 <section>
-                    <p className="eyebrow">Protocol Layer</p>
+                    <p className="eyebrow">协议层</p>
                     <pre className="protocol-box">{protocolSummary}</pre>
                 </section>
                 <section>
-                    <p className="eyebrow">Last Response</p>
-                    <pre className="protocol-box">{store.lastResponse || "No response yet."}</pre>
+                    <p className="eyebrow">最近响应</p>
+                    <pre className="protocol-box">{store.lastResponse || "暂无响应。"}</pre>
                 </section>
                 <section className="card-section">
-                    <p className="eyebrow">Download Manager</p>
+                    <p className="eyebrow">下载管理</p>
                     <div className="download-list">
-                        {attachmentLibrary.length === 0 && downloadHistory.length === 0 ? <p className="muted">No attachment history yet.</p> : null}
+                        {attachmentLibrary.length === 0 && downloadHistory.length === 0 ? <p className="muted">暂无附件记录。</p> : null}
                         {attachmentLibrary.slice(0, 8).map((item) => (
                             <div key={item.id} className="download-item">
                                 <div>
@@ -1007,17 +1026,17 @@ export default function App() {
                                     <div className="muted small-text">{item.author} · {item.timestamp}</div>
                                 </div>
                                 <div className="button-row compact-row">
-                                    <span className="badge">{downloadStates[item.attachment.url] ?? "remote"}</span>
+                                    <span className="badge">{downloadStateLabel(downloadStates[item.attachment.url])}</span>
                                     <button
                                         onClick={() =>
-                                            runAction("download attachment", async () => {
+                                            runAction("下载附件", async () => {
                                                 const url = await cacheAttachment(item.attachment)
                                                 window.open(url, "_blank", "noopener,noreferrer")
                                             })
                                         }
                                         type="button"
                                     >
-                                        {cachedAttachments[item.attachment.url] ? "Open" : "Cache"}
+                                        {cachedAttachments[item.attachment.url] ? "打开" : "缓存"}
                                     </button>
                                 </div>
                             </div>
@@ -1029,7 +1048,7 @@ export default function App() {
                                         <strong>{item.name}</strong>
                                         <div className="muted small-text">{item.timestamp}</div>
                                     </div>
-                                    <span className="badge">history</span>
+                                    <span className="badge">历史</span>
                                 </div>
                             ))
                             : null}
@@ -1042,7 +1061,7 @@ export default function App() {
                     <div className="lightbox-content" onClick={(event) => event.stopPropagation()} role="presentation">
                         <div className="button-row">
                             <strong>{lightboxAttachment.name}</strong>
-                            <button onClick={() => setLightboxAttachment(null)} type="button">Close</button>
+                            <button onClick={() => setLightboxAttachment(null)} type="button">关闭</button>
                         </div>
                         <img alt={lightboxAttachment.name} className="lightbox-image" src={cachedAttachments[lightboxAttachment.url] ?? lightboxAttachment.url} />
                     </div>

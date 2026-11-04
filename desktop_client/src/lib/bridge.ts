@@ -14,7 +14,7 @@ interface BridgeResponse {
 
 function assertOk<T extends BridgeResponse>(payload: T) {
     if (payload.errno !== 0) {
-        throw new Error(payload.errmsg || `Protocol error ${payload.errno}`)
+        throw new Error(payload.errmsg || `协议错误 ${payload.errno}`)
     }
     return payload
 }
@@ -126,7 +126,7 @@ function adminBaseUrl(host: string) {
 export async function fetchUserProfile(host: string, userId: number) {
     const response = await fetch(`${adminBaseUrl(host)}/api/v1/users/${userId}`)
     if (!response.ok) {
-        throw new Error(`Failed to load user profile ${userId}`)
+        throw new Error(`加载用户资料失败 ${userId}`)
     }
     return response.json() as Promise<UserProfile>
 }
@@ -141,7 +141,7 @@ export async function updateUserProfile(host: string, userId: number, bio: strin
     })
     if (!response.ok) {
         const detail = await response.text()
-        throw new Error(detail || `Failed to update user profile ${userId}`)
+        throw new Error(detail || `更新用户资料失败 ${userId}`)
     }
     return response.json() as Promise<UserProfile>
 }
@@ -155,7 +155,7 @@ export async function uploadAvatar(host: string, userId: number, file: File) {
     })
     if (!response.ok) {
         const detail = await response.text()
-        throw new Error(detail || "Avatar upload failed")
+        throw new Error(detail || "头像上传失败")
     }
     return response.json() as Promise<UserProfile>
 }
@@ -185,9 +185,9 @@ export function uploadAttachmentWithProgress(host: string, file: File, onProgres
                 }
                 return
             }
-            reject(new Error(xhr.responseText || "Attachment upload failed"))
+            reject(new Error(xhr.responseText || "附件上传失败"))
         }
-        xhr.onerror = () => reject(new Error("Attachment upload failed"))
+        xhr.onerror = () => reject(new Error("附件上传失败"))
         xhr.send(form)
     })
 }

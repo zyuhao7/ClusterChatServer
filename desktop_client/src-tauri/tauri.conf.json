@@ -12,7 +12,7 @@
     "app": {
         "windows": [
             {
-                "title": "ClusterChat Desktop",
+                "title": "ClusterChat 桌面客户端",
                 "width": 1440,
                 "height": 960,
                 "resizable": true,

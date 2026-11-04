@@ -21,14 +21,14 @@ export const mockSessions: SessionCard[] = [
         title: "Alice",
         kind: "direct",
         presence: "busy",
-        description: "Direct chat with nickname, profile, and status editing entry points.",
+        description: "单聊入口，支持昵称、资料和状态编辑。",
     },
     {
         id: "group-ops",
-        title: "Ops Command",
+        title: "运维指挥群",
         kind: "group",
         presence: "online",
-        description: "Group moderation panel with role, mute, kick, and announcement hooks.",
+        description: "群管理面板，提供角色、禁言、踢人和公告设置。",
     },
 ]
 
@@ -38,27 +38,27 @@ export const mockTimeline: Record<string, TimelineEntry[]> = {
             id: "m-1",
             author: "Alice",
             timestamp: "2026-04-19 20:10",
-            body: "Desktop client phase 1 should make nickname and status flows visible.",
+            body: "桌面端第一阶段需要先让昵称和状态流程可见。",
         },
         {
             id: "m-2",
-            author: "You",
+            author: "我",
             timestamp: "2026-04-19 20:12",
-            body: "We can keep the protocol stable and move avatars into a richer profile page later.",
+            body: "协议可以保持稳定，头像等能力后续再放进更完整的个人资料页。",
         },
     ],
     "group-ops": [
         {
             id: "g-1",
-            author: "System",
+            author: "系统",
             timestamp: "2026-04-19 21:00",
-            body: "Creators can now promote administrators; admins can only downgrade non-creators.",
+            body: "群主可以提升管理员；管理员只能降级非群主成员。",
         },
         {
             id: "g-2",
-            author: "Ops Bot",
+            author: "运维机器人",
             timestamp: "2026-04-19 21:05",
-            body: "Next up: mute, kick, announcement, avatar upload, and media transport.",
+            body: "接下来：禁言、踢人、公告、头像上传和媒体传输。",
         },
     ],
 }

@@ -56,7 +56,7 @@ fn recv_message(stream: &mut TcpStream) -> Result<Value, String> {
     loop {
         let read = stream.read(&mut buf).map_err(|err| err.to_string())?;
         if read == 0 {
-            return Err("socket closed".to_string());
+            return Err("连接已关闭".to_string());
         }
         response.extend_from_slice(&buf[..read]);
         if response.contains(&0) {
@@ -132,7 +132,7 @@ fn send_request(session: &Session, payload: Value) -> Result<Value, String> {
     let request_id = payload
         .get("request_id")
         .and_then(Value::as_str)
-        .ok_or_else(|| "request_id missing".to_string())?
+        .ok_or_else(|| "缺少 request_id".to_string())?
         .to_string();
     let (sender, receiver) = mpsc::channel();
     session
@@ -211,7 +211,7 @@ fn login(
 #[tauri::command]
 fn logout(state: tauri::State<AppState>) -> Result<Value, String> {
     let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": LOGINOUT_MSG,
@@ -229,7 +229,7 @@ fn logout(state: tauri::State<AppState>) -> Result<Value, String> {
 #[tauri::command]
 fn set_presence(state: tauri::State<AppState>, state_name: String) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": SET_USER_STATE_MSG,
@@ -243,7 +243,7 @@ fn set_presence(state: tauri::State<AppState>, state_name: String) -> Result<Val
 #[tauri::command]
 fn set_nickname(state: tauri::State<AppState>, name: String) -> Result<Value, String> {
     let mut guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": SET_NICKNAME_MSG,
@@ -267,7 +267,7 @@ fn set_nickname(state: tauri::State<AppState>, name: String) -> Result<Value, St
 #[tauri::command]
 fn add_friend(state: tauri::State<AppState>, friend_id: i64) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": ADD_FRIEND_MSG,
@@ -281,7 +281,7 @@ fn add_friend(state: tauri::State<AppState>, friend_id: i64) -> Result<Value, St
 #[tauri::command]
 fn create_group(state: tauri::State<AppState>, group_name: String, group_desc: String) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": CREATE_GROUP_MSG,
@@ -296,7 +296,7 @@ fn create_group(state: tauri::State<AppState>, group_name: String, group_desc: S
 #[tauri::command]
 fn join_group(state: tauri::State<AppState>, group_id: i64) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": ADD_GROUP_MSG,
@@ -310,7 +310,7 @@ fn join_group(state: tauri::State<AppState>, group_id: i64) -> Result<Value, Str
 #[tauri::command]
 fn set_group_announcement(state: tauri::State<AppState>, group_id: i64, announcement: String) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": SET_GROUP_ANNOUNCEMENT_MSG,
@@ -325,7 +325,7 @@ fn set_group_announcement(state: tauri::State<AppState>, group_id: i64, announce
 #[tauri::command]
 fn set_group_profile(state: tauri::State<AppState>, group_id: i64, group_name: String, group_desc: String) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": SET_GROUP_PROFILE_MSG,
@@ -341,7 +341,7 @@ fn set_group_profile(state: tauri::State<AppState>, group_id: i64, group_name: S
 #[tauri::command]
 fn mute_group_member(state: tauri::State<AppState>, group_id: i64, target_id: i64, minutes: i64) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": MUTE_GROUP_MEMBER_MSG,
@@ -357,7 +357,7 @@ fn mute_group_member(state: tauri::State<AppState>, group_id: i64, target_id: i6
 #[tauri::command]
 fn kick_group_member(state: tauri::State<AppState>, group_id: i64, target_id: i64) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": KICK_GROUP_MEMBER_MSG,
@@ -372,7 +372,7 @@ fn kick_group_member(state: tauri::State<AppState>, group_id: i64, target_id: i6
 #[tauri::command]
 fn send_direct_message(state: tauri::State<AppState>, target_id: i64, message: String) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": ONE_CHAT_MSG,
@@ -389,7 +389,7 @@ fn send_direct_message(state: tauri::State<AppState>, target_id: i64, message: S
 #[tauri::command]
 fn send_group_message(state: tauri::State<AppState>, group_id: i64, message: String) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": GROUP_CHAT_MSG,
@@ -406,7 +406,7 @@ fn send_group_message(state: tauri::State<AppState>, group_id: i64, message: Str
 #[tauri::command]
 fn search_users(state: tauri::State<AppState>, keyword: String, limit: i64, offset: i64) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": SEARCH_USER_MSG,
@@ -428,7 +428,7 @@ fn query_direct_history(
     order: String,
 ) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": QUERY_HISTORY_MSG,
@@ -451,7 +451,7 @@ fn query_group_history(
     order: String,
 ) -> Result<Value, String> {
     let guard = state.session.lock().map_err(|err| err.to_string())?;
-    let session = guard.as_ref().ok_or_else(|| "No active session".to_string())?;
+    let session = guard.as_ref().ok_or_else(|| "当前没有活动会话".to_string())?;
     let payload = json!({
         "version": CHAT_PROTOCOL_VERSION,
         "msgid": QUERY_HISTORY_MSG,
@@ -507,5 +507,5 @@ fn main() {
             session_info,
         ])
         .run(tauri::generate_context!())
-        .expect("failed to run tauri application");
+        .expect("Tauri 应用启动失败");
 }

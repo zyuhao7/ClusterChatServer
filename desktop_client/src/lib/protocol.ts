@@ -122,6 +122,33 @@ export const FRIEND_STATE_NOTIFY_MSG = 44
 export const ONE_CHAT_MSG_ACK = 8
 export const GROUP_CHAT_MSG_ACK = 16
 
+const presenceLabels: Record<string, string> = {
+    online: "在线",
+    offline: "离线",
+    busy: "忙碌",
+}
+
+export function presenceLabel(state: string) {
+    return presenceLabels[state] ?? state
+}
+
+export function sessionKindLabel(kind: "direct" | "group") {
+    return kind === "direct" ? "单聊" : "群聊"
+}
+
+export function roleLabel(role: string) {
+    if (role === "creator") {
+        return "群主"
+    }
+    if (role === "admin") {
+        return "管理员"
+    }
+    if (role === "normal") {
+        return "普通成员"
+    }
+    return role
+}
+
 export function directSessionId(userId: number) {
     return `direct-${userId}`
 }
@@ -154,7 +181,7 @@ export function buildSessionsFromLogin(payload: LoginResponsePayload) {
             title: friend.name,
             kind: "direct",
             presence: friend.state,
-            subtitle: `friend · ${friend.state}`,
+            subtitle: `好友 · ${presenceLabel(friend.state)}`,
             unreadCount: 0,
             latestMessage: "",
             latestTimestamp: "",
@@ -168,7 +195,7 @@ export function buildSessionsFromLogin(payload: LoginResponsePayload) {
             title: group.groupname,
             kind: "group",
             presence: "group",
-            subtitle: group.announcement || group.groupdesc || "group",
+            subtitle: group.announcement || group.groupdesc || "群聊",
             unreadCount: 0,
             latestMessage: "",
             latestTimestamp: "",
@@ -250,7 +277,7 @@ function parseAttachmentPayload(raw: string): AttachmentPayload | null {
 }
 
 export function toTimelineItem(event: ProtocolPushEvent, sessionId: string, authorOverride?: string): TimelineItem {
-    const rawBody = event.msg || (event.msgid === RECALL_NOTIFY_MSG ? "message recalled" : "")
+    const rawBody = event.msg || (event.msgid === RECALL_NOTIFY_MSG ? "[消息已撤回]" : "")
     const attachment = rawBody ? parseAttachmentPayload(rawBody) : null
     return {
         id: `${sessionId}-${event.message_id ?? event.request_id ?? Date.now()}`,
@@ -278,11 +305,11 @@ export function createProtocolSummary() {
                 "SET_NICKNAME_MSG",
             ],
             guarantees: [
-                "request_id based idempotency",
-                "shared error code contract",
-                "history order asc|desc",
-                "blacklist aware messaging",
-                "desktop tauri event bridge",
+                "基于 request_id 的幂等处理",
+                "统一错误码契约",
+                "历史消息支持 asc|desc 排序",
+                "感知黑名单的消息投递",
+                "桌面端 Tauri 事件桥接",
             ],
         },
         null,
